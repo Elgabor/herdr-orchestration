@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "schema_version": 1,
+      "profile_id": "example-profile",
+      "harness": "pi",
+      "version": "installed-version",
+      "provider": "configured-provider",
+      "account_ref": "non-sensitive-account-label",
+      "auth_mode": "unknown",
+      "model_id": "configured-model",
+      "effort": "configured-effort",
+      "source": "owner-declared configuration; verify in the native harness",
+      "authorized": false
+    }
+  ]
+}

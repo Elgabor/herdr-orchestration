@@ -4,8 +4,9 @@
   `81c22c9b09e3bf9e7708dcac068528f85c490454`.
 - T01: DONE, commit `67a45f4`. T03: DONE, commit `ecb4332` (13 offline tests).
   T04: DONE, commit `4e2aca9`. T05: DONE, commit `c45afe9`.
-  T06: Pi adapter and tests complete, commit pending; other harnesses remain
-  uncertified. T02 remains
+  T06: Pi adapter committed `def8820`; other harnesses remain uncertified.
+  T07: conservative quota reader/catalog and tests complete, commit pending.
+  T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
   complete four-owner support; Codex/Claude/OpenCode owners are unverified.
@@ -25,7 +26,7 @@
   woke the same owner session. Unsent editor text survived a second return.
 - NOT RUN: Codex/Claude/OpenCode owner return; Claude lacks credits. Codex
   startup hit a trust prompt, which was declined. No integration was updated.
-- PASS: 36 offline tests for contracts, tab scope, provisioning, native Pi
+- PASS: 40 offline tests for contracts, tab scope, provisioning, native Pi
   reset and state.
   Live `run init` stored an explicit one-worker plan before split; the first
   `team prepare` recorded pane `w3:p2` but found its shell not yet ready.
@@ -37,4 +38,8 @@
   owner session unchanged. No LLM task wait was used for reset.
 - NOT RUN: Codex, Claude Code and OpenCode native reset. Their adapter
   mutations remain disabled; Claude lacks credits.
-- Next: commit the T06 Pi increment, then T07 quota/configuration readers.
+- PASS: T07 offline cache tests keep session usage separate from account
+  balance, invalidate stale/account-shifted samples, and preserve an explicit
+  profile. No live account quota was read; all four harness readers return
+  unknown. Automatic cost choice stays `needs_info` without comparable data.
+- Next: commit T07, then T08 dispatch and structured result boundaries.

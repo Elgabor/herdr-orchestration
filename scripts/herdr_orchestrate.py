@@ -15,6 +15,7 @@ from herdr_runtime.state import StateConflict, StateStore, UnsafePath
 from herdr_runtime.transport import HerdrClient, HerdrError
 from herdr_runtime.provision import ProvisioningError, bootstrap_run, prepare_team
 from herdr_runtime.native_reset import ResetError, new_conversation
+from herdr_runtime.quota import check_choice, read_quota, validate_catalog
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -85,6 +86,16 @@ def parser() -> argparse.ArgumentParser:
     reset.add_argument("--bridge-dir", required=True, type=Path)
     reset.add_argument("--expected-config", type=Path)
     reset.add_argument("--state-dir", type=Path)
+    quota = sub.add_parser("quota", help="Read scoped usage evidence without account side effects")
+    quota_sub = quota.add_subparsers(dest="quota_command", required=True)
+    for operation in ("read", "check"):
+        command = quota_sub.add_parser(operation)
+        command.add_argument("--catalog", required=True, type=Path)
+        command.add_argument("--profile-id", required=True)
+        command.add_argument("--state-dir", type=Path)
+        command.add_argument("--ttl-seconds", type=int, default=300)
+        if operation == "check":
+            command.add_argument("--mode", choices=("explicit", "existing", "auto_authorized"), required=True)
     return root
 
 
@@ -96,6 +107,19 @@ def state_dir(override: Path | None) -> Path:
 def main() -> int:
     args = parser().parse_args()
     try:
+        if args.command == "quota":
+            profiles = validate_catalog(read_config(args.catalog))
+            profile = next((item for item in profiles if item["profile_id"] == args.profile_id), None)
+            if profile is None:
+                raise ContractError("profile_id: absent from catalog")
+            observed = read_quota(profile, StateStore(state_dir(args.state_dir)),
+                                  ttl_seconds=args.ttl_seconds)
+            if args.quota_command == "read":
+                return envelope("ok", "quota sample; unknown values are not credit", **observed)
+            choice = check_choice(profile, observed["sample"], mode=args.mode)
+            outcome = "ok" if choice["outcome"] in {"eligible", "eligible_with_uncertainty"} else choice["outcome"]
+            return envelope(outcome, choice["reason"], eligibility=choice["outcome"], profile_id=args.profile_id,
+                            unknown=choice.get("unknown", []), cache=observed["cache"])
         client = HerdrClient()
         if args.command == "doctor":
             status = client.status()
