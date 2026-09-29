@@ -1,0 +1,6 @@
+interface:
+  display_name: "Herdr Orchestration"
+  short_description: "Event-driven owner and worker coordination"
+  default_prompt: "Use $herdr-orchestration to delegate this work through Herdr, wait without polling, and return compact owner-verifiable handoffs."
+policy:
+  allow_implicit_invocation: true
