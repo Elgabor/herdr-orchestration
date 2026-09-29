@@ -2,14 +2,17 @@
 
 - Spec: HERDR-ORCHESTRATION-SPEC-v1.0, 2026-09-29. Work checkout initial HEAD:
   `81c22c9b09e3bf9e7708dcac068528f85c490454`.
-- T01: DONE, commit `67a45f4`. Current: T03 offline contracts. T02 live gate:
-  BLOCKED pending dedicated owner/worker test setup and authorization.
+- T01: DONE, commit `67a45f4`. T03: DONE, commit `ecb4332` (13 offline tests).
+  Current: T02 capability gate. T02 is BLOCKED for complete owner support:
+  Pi's blocking wait fails pre-completion steering; other owners unverified.
 - Decision: use the user-specified standalone repository. The spec's
   `personal-skills` baseline cannot be fetched; no migration from it is assumed.
 - Decision: develop against installed versions and mark critical capabilities
   unverified until a dedicated Herdr session proves them. Do not update tools.
-- PASS: baseline and 13 offline contract/state tests. Read-only Herdr reports
-  server not running, client schema v1, Codex integration current, Pi/Claude/
-  OpenCode integrations outdated. No runtime mutation or installation.
-- NOT RUN: T02 same-thread return and reset tests; live server compatibility.
-- Next: finish T03 and commit; continue T04 independent fixture-based work.
+- PASS: 13 offline tests; dedicated Herdr 0.9.2 client/server protocol 22;
+  Pi→Pi normal same-owner return, interrupted owner wait plus worker reattach,
+  and worker `/new` in the same pane with configuration preserved.
+- FAIL: Pi owner blocking `--wait` queued user input until the worker finished.
+- NOT RUN: Codex/Claude/OpenCode owner return; Claude lacks credits. Codex
+  startup hit a trust prompt, which was declined. No integration was updated.
+- Next: record T02 findings, then implement T04 independent context binding.
