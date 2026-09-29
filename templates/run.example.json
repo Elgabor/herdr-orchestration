@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "run_id": "example-run",
+  "mission": "Coordinate the approved work and return results to the owner",
+  "generation": 0,
+  "owner_epoch": 1,
+  "scope": {
+    "session_id": "example-session",
+    "workspace_id": "example-workspace",
+    "tab_id": "example-tab",
+    "owner_pane_id": "example-owner-pane"
+  },
+  "execution_mode": "sequential",
+  "parallel_authorized": false,
+  "bootstrap_authorized": false,
+  "team_frozen": true,
+  "pause_dispatch": false,
+  "members": [
+    {
+      "member_id": "worker-1",
+      "label": "Worker 1",
+      "harness": "pi",
+      "session_id": "example-session",
+      "workspace_id": "example-workspace",
+      "tab_id": "example-tab",
+      "pane_id": "example-worker-pane",
+      "agent_alias": "worker-one",
+      "conversation_id": "example-native-thread",
+      "created_by_run": false
+    }
+  ],
+  "assignments": {},
+  "outbox": {}
+}

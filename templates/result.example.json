@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "run_id": "example-run",
+  "assignment_id": "example-assignment",
+  "member_id": "worker-1",
+  "conversation_id": "example-native-thread",
+  "revision": 0,
+  "attempt": 1,
+  "status": "done",
+  "summary": "Completed the bounded read-only example.",
+  "repo": null,
+  "base_head": null,
+  "work_snapshot": null,
+  "files_changed": [],
+  "verification": [],
+  "verification_note": "No executable verification applies to this read-only example.",
+  "open_points": [],
+  "artifacts": []
+}

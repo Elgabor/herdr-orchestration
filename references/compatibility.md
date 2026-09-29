@@ -15,12 +15,17 @@ was installed or updated.
 | [OpenCode](https://github.com/anomalyco/opencode/releases/tag/v1.18.33) | v1.18.33 | 1.18.33 | Herdr server unknown | Not inspected | NOT RUN |
 
 `HERDR_ENV`, `HERDR_SESSION_ID`, `HERDR_WORKSPACE_ID`, and `HERDR_PANE_ID`
-were unset in this shell. The running server, socket schema, current session,
-installed integration state, and pane inventory were therefore not queried.
-Client version alone does not certify server capabilities. A dedicated Herdr
-session, available accounts, and an authorized test budget are required for
-the live checks. Test the installed Codex and Pi versions first; any upgrade
-would need a separate instruction.
+were unset in this shell. A read-only `herdr status server` reported `not
+running`; no active session or pane inventory was queried. The bundled client
+schema reports `schema_version=1`, 272,578 bytes, SHA-256
+`9e2af207e9aa8183d4aeca5fde9cc48e7909bb40cdbd7cf21608a6d3ea78075b`.
+This is **client schema only**; no server protocol compatibility was observed.
+
+Read-only `herdr integration status` reports Codex current (v8), Pi outdated
+(v8 < v9), Claude outdated (v9 < v10), and OpenCode outdated (v11 < v13).
+No integration was changed. A dedicated Herdr session, available accounts, and
+an authorized test budget are required for live checks. Test the installed
+Codex and Pi versions first; any upgrade needs a separate instruction.
 
 ## Migration inventory
 

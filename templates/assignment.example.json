@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "run_id": "example-run",
+  "assignment_id": "example-assignment",
+  "member_id": "worker-1",
+  "context_key": "example-work",
+  "conversation_id": "example-native-thread",
+  "revision": 0,
+  "attempt": 1,
+  "state": "prepared",
+  "return_to": "owner",
+  "repo": null,
+  "base_head": null,
+  "work_snapshot": null
+}
