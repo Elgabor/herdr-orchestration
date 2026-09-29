@@ -8,7 +8,7 @@ is evidence for adapter design, not a supported four-harness claim.
 
 | Harness / role | Normal same-owner return | User input before worker finish | Interrupted wait preserves worker | Native new conversation, same pane | Status |
 | --- | --- | --- | --- | --- | --- |
-| Pi 0.87.1 owner, Pi 0.87.1 worker | PASS | FAIL with blocking Bash `--wait` | PASS after owner Escape and explicit `agent wait` reattach | PASS for worker `/new` | Native blocking wait alone is insufficient |
+| Pi 0.87.1 owner, Pi 0.87.1 worker | PASS with a process-local Pi extension | PASS with the extension; FAIL with blocking Bash `--wait` | PASS after owner Escape and explicit `agent wait` reattach | PASS for worker `/new` | Return bridge proven in test; production state/recovery pending |
 | Codex CLI 0.155.1 owner | NOT RUN | NOT RUN | NOT RUN | NOT RUN | Startup stopped at directory trust prompt; no persistent trust or hook change made |
 | Claude Code 2.1.284 | NOT RUN | NOT RUN | NOT RUN | NOT RUN | Account has no credits, per user |
 | OpenCode 1.18.33 | NOT RUN | NOT RUN | NOT RUN | NOT RUN | Integration v11 is outdated against installed v13 |
@@ -44,9 +44,32 @@ owner tool interruptible by itself. [Pi's documented steering](https://github.co
 queues an Enter message until the current response and tool calls complete.
 The test matched that behavior. A Pi owner bridge must return control to the
 normal conversation while a deterministic listener watches the worker, then
-deliver completion into that *same* native session. The bridge is a candidate
-until user input, draft preservation, duplicate delivery, and owner epoch are
-demonstrated live.
+deliver completion into that *same* native session.
+
+## Pi process-local bridge prototype
+
+A temporary `--extension` file in the separate test folder registered one Pi
+command. It spawned one asynchronous Herdr `agent prompt --wait` child and
+returned the Pi command immediately. On child completion, it called Pi's
+native `sendUserMessage()` in the existing process. It performed no model call
+itself. The extension was loaded by path for this test; it was not installed
+globally or included as a second production runtime.
+
+With worker gate `trial3` still closed, the owner completed a fresh user turn
+and created `trial3.steered`. Only afterward was the worker released. The
+extension then delivered a completion message to the **same** Pi session
+(`01a0ee9e-52b7-7659-ad97-e505c3822699`), which started and finished a new
+model turn without a manual user message. With `trial4`, the owner had the
+unsent editor text `DRAFT-TRIAL4-KEEP`; the same completion path ran and the
+draft remained in the editor afterward. These observations demonstrate
+same-session wake, pre-completion user input, and draft preservation for Pi
+0.87.1 in the tested configuration. The prototype only has in-process duplicate
+suppression; durable outbox, epoch fencing, crash recovery, and assignment
+identity belong in the production adapter and remain unverified live.
+
+The [Pi 0.87.1 extension API](https://raw.githubusercontent.com/earendil-works/pi/v0.87.1/packages/coding-agent/src/core/extensions/types.ts)
+defines `sendUserMessage()` as triggering a turn. The test checked this
+behavior in the interactive pane while the delegated worker was active.
 
 No UI notification, detached PID, background `--wait`, or `/goal` is treated
 as proof of owner return. Critical dispatch remains disabled until its owner
