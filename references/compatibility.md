@@ -11,7 +11,7 @@ was installed or updated.
 | [Herdr](https://github.com/herdrdev/herdr/releases/tag/v0.9.2) | v0.9.2 | 0.9.2 | Dedicated server 0.9.2, protocol 22 | Not applicable | PASS for version match only |
 | [Codex CLI](https://github.com/openai/codex/releases/tag/rust-v0.159.0) | rust-v0.159.0 | 0.155.1 | Dedicated Herdr server protocol 22 | Current v8 | NOT RUN; startup trust prompt declined |
 | [Claude Code](https://github.com/anthropics/claude-code/releases/tag/v2.1.284) | v2.1.284 | 2.1.284 | Dedicated Herdr server protocol 22 | Outdated v9 < v10 | NOT RUN; no credits |
-| [Pi](https://github.com/earendil-works/pi/releases/tag/v0.99.1) | v0.99.1 | 0.87.1 | Dedicated Herdr server protocol 22 | Outdated v8 < v9 | FAIL for blocking-wait steering; partial PASS for return/reset |
+| [Pi](https://github.com/earendil-works/pi/releases/tag/v0.99.1) | v0.99.1 | 0.87.1 | Dedicated Herdr server protocol 22 | Outdated v8 < v9 | FAIL for blocking-wait steering; PASS for process-local native reset and return prototypes |
 | [OpenCode](https://github.com/anomalyco/opencode/releases/tag/v1.18.33) | v1.18.33 | 1.18.33 | Dedicated Herdr server protocol 22 | Outdated v11 < v13 | NOT RUN |
 
 `HERDR_ENV`, `HERDR_SESSION_ID`, `HERDR_WORKSPACE_ID`, and `HERDR_PANE_ID`

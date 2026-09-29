@@ -161,6 +161,8 @@ def validate_run(value: object) -> dict:
         if key != assignment["assignment_id"] or assignment["run_id"] != obj["run_id"]:
             raise ContractError(f"assignments.{key}: identity mismatch")
     _required(obj, "outbox", dict)
+    if "resets" in obj and not isinstance(obj["resets"], dict):
+        raise ContractError("resets: expected object")
     for key in ("setup_plan", "setup_journal", "created_resources"):
         _required(obj, key, list)
     if mode == "adopt_existing":

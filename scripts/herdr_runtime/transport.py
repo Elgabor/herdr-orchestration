@@ -86,3 +86,15 @@ class HerdrClient:
                                  timeout=45)["result"]["agent"]
         except (KeyError, TypeError) as error:
             raise HerdrError("Herdr start response malformed; delivery state uncertain") from error
+
+    def agent_get(self, pane_id: str) -> dict:
+        try:
+            return self._execute("agent", "get", pane_id)["result"]["agent"]
+        except (KeyError, TypeError) as error:
+            raise HerdrError("Herdr agent response malformed") from error
+
+    def agent_prompt(self, pane_id: str, prompt: str) -> dict:
+        try:
+            return self._execute("agent", "prompt", pane_id, prompt)["result"]["agent"]
+        except (KeyError, TypeError) as error:
+            raise HerdrError("Herdr prompt response malformed; delivery state uncertain") from error

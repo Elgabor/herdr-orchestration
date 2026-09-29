@@ -23,6 +23,11 @@ class UnsafePath(RuntimeError):
     pass
 
 
+def _static_member(member: dict) -> dict:
+    return {key: value for key, value in member.items()
+            if key not in {"conversation_id", "context_key", "identity_status"}}
+
+
 def _read_json(path: Path) -> dict:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -158,8 +163,18 @@ class StateStore:
             for key in ("mode", "setup_plan", "bootstrap_authorized", "execution_mode", "parallel_authorized"):
                 if run[key] != current[key]:
                     raise StateConflict(f"{key} changed after run initialization")
-            if current["team_frozen"] and (run["members"] != current["members"] or not run["team_frozen"]):
-                raise StateConflict("frozen team changed")
+            if current["team_frozen"]:
+                if not run["team_frozen"] or len(run["members"]) != len(current["members"]):
+                    raise StateConflict("frozen team changed")
+                for old, new in zip(current["members"], run["members"]):
+                    if _static_member(old) != _static_member(new):
+                        raise StateConflict("frozen team changed")
+                    if new["conversation_id"] != old["conversation_id"]:
+                        reset = run.get("resets", {}).get(old["member_id"], {})
+                        if (reset.get("state") != "complete"
+                                or reset.get("old_conversation_id") != old["conversation_id"]
+                                or reset.get("new_conversation_id") != new["conversation_id"]):
+                            raise StateConflict("conversation changed without completed native reset")
             if current["team_frozen"] and (run["setup_journal"] != current["setup_journal"]
                                            or run["created_resources"] != current["created_resources"]):
                 raise StateConflict("frozen setup changed")

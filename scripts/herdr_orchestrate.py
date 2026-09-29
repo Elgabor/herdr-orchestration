@@ -14,6 +14,7 @@ from herdr_runtime.contracts import ContractError, MAX_ENVELOPE_BYTES
 from herdr_runtime.state import StateConflict, StateStore, UnsafePath
 from herdr_runtime.transport import HerdrClient, HerdrError
 from herdr_runtime.provision import ProvisioningError, bootstrap_run, prepare_team
+from herdr_runtime.native_reset import ResetError, new_conversation
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -73,6 +74,17 @@ def parser() -> argparse.ArgumentParser:
     init = run_sub.add_parser("init")
     init.add_argument("--config", required=True, type=Path)
     init.add_argument("--state-dir", type=Path)
+    conversation = sub.add_parser("conversation", help="Native worker conversation control")
+    conversation_sub = conversation.add_subparsers(dest="conversation_command", required=True)
+    reset = conversation_sub.add_parser("reset")
+    reset.add_argument("--run-id", required=True)
+    reset.add_argument("--member-id", required=True)
+    reset.add_argument("--next-context-key", required=True)
+    reset.add_argument("--expected-generation", required=True, type=int)
+    reset.add_argument("--owner-epoch", required=True, type=int)
+    reset.add_argument("--bridge-dir", required=True, type=Path)
+    reset.add_argument("--expected-config", type=Path)
+    reset.add_argument("--state-dir", type=Path)
     return root
 
 
@@ -103,6 +115,14 @@ def main() -> int:
             return envelope("ok", "planned team prepared and frozen", run_id=run["run_id"],
                             owner_epoch=run["owner_epoch"], generation=run["generation"],
                             members=len(run["members"]), team_frozen=run["team_frozen"])
+        if args.command == "conversation" and args.conversation_command == "reset":
+            expected_config = read_config(args.expected_config) if args.expected_config else None
+            run = new_conversation(client, StateStore(state_dir(args.state_dir)), args.run_id,
+                                   args.member_id, args.expected_generation, args.owner_epoch,
+                                   args.next_context_key, args.bridge_dir, expected_config)
+            return envelope("ok", "native Pi conversation reset and configuration verified",
+                            run_id=run["run_id"], member_id=args.member_id,
+                            generation=run["generation"], owner_epoch=run["owner_epoch"])
         public, private = inspect_team(client)
         if args.command == "team":
             return envelope("ok", "owner tab inspected without transcripts", **public)
@@ -125,6 +145,8 @@ def main() -> int:
     except StateConflict as error:
         return envelope("busy", str(error))
     except ProvisioningError as error:
+        return envelope(error.outcome, str(error))
+    except ResetError as error:
         return envelope(error.outcome, str(error))
     except (HerdrError, UnsafePath) as error:
         return envelope("capability_blocked", str(error))
