@@ -68,6 +68,13 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "parallel not authorized"):
             validate_run(run)
 
+    def test_real_herdr_ids_and_alias_rules(self):
+        run = example("run")
+        self.assertEqual(validate_run(run)["scope"]["owner_pane_id"], "w1:p1")
+        run["members"][0]["agent_alias"] = "Worker 1"
+        with self.assertRaisesRegex(ContractError, "agent_alias"):
+            validate_run(run)
+
     def test_quota_unknown_is_not_zero(self):
         metric = {"state": "unknown", "value": None, "unit": "USD", "scope": "account", "observed_at": "2026-09-29T00:00:00Z", "source": "native"}
         validate_metric(metric)

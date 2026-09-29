@@ -65,6 +65,16 @@ def agent_status(payload: dict) -> str | None:
 
 
 def main() -> int:
+    # The old interface cannot bind a run, owner, pane, native conversation,
+    # or return channel. Keep its public path but fail before any Herdr call.
+    print(json.dumps({
+        "schema_version": 1,
+        "outcome": "migration_required",
+        "retry_safe": False,
+        "message": "Use herdr_orchestrate.py after binding a run; legacy --agent/--prompt dispatch is disabled",
+    }))
+    return 20
+
     args = parse_args()
     if os.environ.get("HERDR_ENV") != "1":
         return fail("HERDR_ENV=1 is required; run the owner inside Herdr")

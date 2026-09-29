@@ -109,6 +109,33 @@ class StateStore:
             _atomic_json(path, run)
         return run
 
+    def create_run_claimed(self, run: dict, claim_keys: list[str]) -> dict:
+        """Reserve owner and worker panes before publishing a new run.
+
+        A crash after the claim write can leave an orphan claim, which blocks
+        reuse until reconciled. It cannot silently give the pane to two runs.
+        """
+        validate_run(run)
+        if run["generation"] != 0 or run["owner_epoch"] != 1:
+            raise ContractError("generation/owner_epoch: expected 0/1 for new run")
+        if not claim_keys or len(set(claim_keys)) != len(claim_keys):
+            raise ContractError("claim_keys: expected unique nonempty list")
+        if any(not isinstance(key, str) or not ID.fullmatch(key) for key in claim_keys):
+            raise ContractError("claim_keys: invalid identifier")
+        path = self._path(run["run_id"])
+        with self._locked():
+            if path.exists() or path.is_symlink():
+                raise StateConflict("run_id: already exists")
+            claims = self._load_claims()
+            for key in claim_keys:
+                if key in claims:
+                    raise StateConflict(f"claim_keys: pane already claimed ({key})")
+            for key in claim_keys:
+                claims[key] = {"run_id": run["run_id"], "owner_epoch": 1}
+            _atomic_json(self.root / "claims.json", claims)
+            _atomic_json(path, run)
+        return run
+
     def load_run(self, run_id: str) -> dict:
         run = _read_json(self._path(run_id))
         validate_run(run)
@@ -126,6 +153,10 @@ class StateStore:
                 raise StateConflict("new generation or owner_epoch invalid")
             if run["run_id"] != current["run_id"] or run["scope"] != current["scope"]:
                 raise StateConflict("run identity or scope changed")
+            if run["owner"] != current["owner"]:
+                raise StateConflict("owner binding changed")
+            if current["team_frozen"] and (run["members"] != current["members"] or not run["team_frozen"]):
+                raise StateConflict("frozen team changed")
             _atomic_json(path, run)
         return run
 

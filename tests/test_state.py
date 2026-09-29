@@ -39,6 +39,13 @@ class StateTests(unittest.TestCase):
         with self.assertRaises(StateConflict):
             self.store.update_run(updated, expected_generation=1, owner_epoch=1)
 
+    def test_frozen_roster_cannot_be_rewritten(self):
+        changed = copy.deepcopy(self.run)
+        changed["generation"] = 1
+        changed["members"][0]["label"] = "Other"
+        with self.assertRaisesRegex(StateConflict, "frozen team"):
+            self.store.update_run(changed, expected_generation=0, owner_epoch=1)
+
     def test_shared_claim_does_not_expire_or_transfer(self):
         self.store.claim_member("session-pane", run_id="example-run", owner_epoch=1)
         second = example("run")
@@ -51,6 +58,17 @@ class StateTests(unittest.TestCase):
             self.store.release_member("session-pane", run_id="example-run", owner_epoch=1)
         self.store.claim_member("session-pane", run_id="example-run", owner_epoch=2)
         self.store.release_member("session-pane", run_id="example-run", owner_epoch=2)
+
+    def test_claimed_run_rejects_overlapping_pane(self):
+        second = example("run")
+        second["run_id"] = "second-run"
+        self.store.create_run_claimed(second, ["pane-b"])
+        third = example("run")
+        third["run_id"] = "third-run"
+        with self.assertRaisesRegex(StateConflict, "already claimed"):
+            self.store.create_run_claimed(third, ["pane-b"])
+        with self.assertRaises(StateConflict):
+            self.store.load_run("third-run")
 
     def test_event_dedup_and_action_intent_survive_epoch(self):
         run = self.store.load_run("example-run")

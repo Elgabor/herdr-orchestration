@@ -1,0 +1,16 @@
+{
+  "mode": "adopt_existing",
+  "run_id": "example-run",
+  "mission": "Return results for the approved mission to the owner",
+  "execution_mode": "sequential",
+  "parallel_authorized": false,
+  "bootstrap_authorized": false,
+  "members": [
+    {
+      "member_id": "worker-1",
+      "label": "Worker 1",
+      "pane_id": "w1:p2",
+      "harness": "pi"
+    }
+  ]
+}

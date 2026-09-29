@@ -6,9 +6,24 @@
   "owner_epoch": 1,
   "scope": {
     "session_id": "example-session",
-    "workspace_id": "example-workspace",
-    "tab_id": "example-tab",
-    "owner_pane_id": "example-owner-pane"
+    "workspace_id": "w1",
+    "tab_id": "w1:t1",
+    "owner_pane_id": "w1:p1"
+  },
+  "owner": {
+    "member_id": "owner",
+    "label": "Owner",
+    "harness": "pi",
+    "session_id": "example-session",
+    "workspace_id": "w1",
+    "tab_id": "w1:t1",
+    "pane_id": "w1:p1",
+    "terminal_id": "term_example_owner",
+    "occupant_revision": 1,
+    "identity_status": "verified",
+    "agent_alias": "owner",
+    "conversation_id": "example-owner-native-thread",
+    "created_by_run": false
   },
   "execution_mode": "sequential",
   "parallel_authorized": false,
@@ -21,9 +36,12 @@
       "label": "Worker 1",
       "harness": "pi",
       "session_id": "example-session",
-      "workspace_id": "example-workspace",
-      "tab_id": "example-tab",
-      "pane_id": "example-worker-pane",
+      "workspace_id": "w1",
+      "tab_id": "w1:t1",
+      "pane_id": "w1:p2",
+      "terminal_id": "term_example_worker",
+      "occupant_revision": 1,
+      "identity_status": "verified",
       "agent_alias": "worker-one",
       "conversation_id": "example-native-thread",
       "created_by_run": false

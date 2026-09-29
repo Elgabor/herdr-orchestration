@@ -14,6 +14,8 @@ SCHEMA_VERSION = 1
 MAX_RESULT_BYTES = 12 * 1024
 MAX_ENVELOPE_BYTES = 4 * 1024
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+HERDR_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")
+AGENT_ALIAS = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 HARNESSES = {"codex", "claude", "pi", "opencode"}
 ASSIGNMENT_STATES = {
     "prepared", "dispatching", "active", "result_received", "collected",
@@ -50,6 +52,14 @@ def _id(obj: dict, key: str, field: str = "") -> str:
     path = f"{field}.{key}" if field else key
     if not ID.fullmatch(value):
         raise ContractError(f"{path}: invalid identifier")
+    return value
+
+
+def _herdr_id(obj: dict, key: str, field: str = "") -> str:
+    value = _required(obj, key, str, field)
+    path = f"{field}.{key}" if field else key
+    if not HERDR_ID.fullmatch(value):
+        raise ContractError(f"{path}: invalid Herdr identifier")
     return value
 
 
@@ -93,9 +103,16 @@ def validate_member(value: object) -> dict:
     _required(obj, "label", str)
     _enum(obj, "harness", HARNESSES)
     for key in ("session_id", "workspace_id", "tab_id", "pane_id"):
-        _id(obj, key)
+        _herdr_id(obj, key)
+    _herdr_id(obj, "terminal_id")
+    _nonnegative(obj, "occupant_revision")
+    _enum(obj, "identity_status", {"verified", "unknown"})
     _nullable_string(obj, "agent_alias")
+    if obj["agent_alias"] is not None and not AGENT_ALIAS.fullmatch(obj["agent_alias"]):
+        raise ContractError("agent_alias: invalid Herdr alias")
     _nullable_string(obj, "conversation_id")
+    if obj["identity_status"] == "verified" and obj["conversation_id"] is None:
+        raise ContractError("conversation_id: required for verified identity")
     if type(obj.get("created_by_run")) is not bool:
         raise ContractError("created_by_run: expected bool")
     return obj
@@ -110,18 +127,28 @@ def validate_run(value: object) -> dict:
     _nonnegative(obj, "owner_epoch")
     scope = _object(_required(obj, "scope", dict), "scope")
     for key in ("session_id", "workspace_id", "tab_id", "owner_pane_id"):
-        _id(scope, key, "scope")
+        _herdr_id(scope, key, "scope")
+    owner = validate_member(_required(obj, "owner", dict))
+    if owner["pane_id"] != scope["owner_pane_id"]:
+        raise ContractError("owner.pane_id: outside owner scope")
+    for key in ("session_id", "workspace_id", "tab_id"):
+        if owner[key] != scope[key]:
+            raise ContractError(f"owner.{key}: outside owner scope")
     _enum(obj, "execution_mode", {"sequential", "parallel"})
     for key in ("parallel_authorized", "bootstrap_authorized", "team_frozen", "pause_dispatch"):
         if type(obj.get(key)) is not bool:
             raise ContractError(f"{key}: expected bool")
     members = _required(obj, "members", list)
-    ids = set()
+    ids = {owner["member_id"]}
+    panes = {owner["pane_id"]}
     for index, member in enumerate(members):
         validate_member(member)
         if member["member_id"] in ids:
             raise ContractError(f"members[{index}].member_id: duplicate")
+        if member["pane_id"] in panes:
+            raise ContractError(f"members[{index}].pane_id: duplicate")
         ids.add(member["member_id"])
+        panes.add(member["pane_id"])
         for key in ("session_id", "workspace_id", "tab_id"):
             if member[key] != scope[key]:
                 raise ContractError(f"members[{index}].{key}: outside run scope")
