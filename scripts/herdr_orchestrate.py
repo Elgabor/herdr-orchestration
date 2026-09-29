@@ -13,6 +13,7 @@ from herdr_runtime.context import adopt_existing, inspect_team, TESTED_HERDR_VER
 from herdr_runtime.contracts import ContractError, MAX_ENVELOPE_BYTES
 from herdr_runtime.state import StateConflict, StateStore, UnsafePath
 from herdr_runtime.transport import HerdrClient, HerdrError
+from herdr_runtime.provision import ProvisioningError, bootstrap_run, prepare_team
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -62,12 +63,22 @@ def parser() -> argparse.ArgumentParser:
     team = sub.add_parser("team", help="Inspect the caller's Herdr tab")
     team_sub = team.add_subparsers(dest="team_command", required=True)
     team_sub.add_parser("inspect")
+    prepare = team_sub.add_parser("prepare")
+    prepare.add_argument("--run-id", required=True)
+    prepare.add_argument("--expected-generation", required=True, type=int)
+    prepare.add_argument("--owner-epoch", required=True, type=int)
+    prepare.add_argument("--state-dir", type=Path)
     run = sub.add_parser("run", help="Initialize an adopted team")
     run_sub = run.add_subparsers(dest="run_command", required=True)
     init = run_sub.add_parser("init")
     init.add_argument("--config", required=True, type=Path)
     init.add_argument("--state-dir", type=Path)
     return root
+
+
+def state_dir(override: Path | None) -> Path:
+    default = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))) / "herdr-orchestration"
+    return override or default
 
 
 def main() -> int:
@@ -86,22 +97,35 @@ def main() -> int:
                             tested_version=TESTED_HERDR_VERSION,
                             context="inside_herdr" if os.environ.get("HERDR_ENV") == "1" else "outside_herdr",
                             critical_operations="not_certified" if compatible else "blocked")
+        if args.command == "team" and args.team_command == "prepare":
+            run = prepare_team(client, StateStore(state_dir(args.state_dir)), args.run_id,
+                               args.expected_generation, args.owner_epoch)
+            return envelope("ok", "planned team prepared and frozen", run_id=run["run_id"],
+                            owner_epoch=run["owner_epoch"], generation=run["generation"],
+                            members=len(run["members"]), team_frozen=run["team_frozen"])
         public, private = inspect_team(client)
         if args.command == "team":
             return envelope("ok", "owner tab inspected without transcripts", **public)
         if args.command == "run":
             config = read_config(args.config)
-            default = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))) / "herdr-orchestration"
-            store = StateStore(args.state_dir or default)
-            run = adopt_existing(config, private, store)
-            return envelope("ok", "existing team adopted and frozen",
+            store = StateStore(state_dir(args.state_dir))
+            if config.get("mode") == "adopt_existing":
+                run = adopt_existing(config, private, store)
+            elif config.get("mode") == "bootstrap_team":
+                run = bootstrap_run(config, private, store)
+            else:
+                raise ContractError("mode: expected adopt_existing or bootstrap_team")
+            return envelope("ok", "run initialized with scoped team plan",
                             run_id=run["run_id"], owner_epoch=1,
                             scope=run["scope"], members=len(run["members"]),
+                            team_frozen=run["team_frozen"],
                             client_visibility="unknown")
     except ContractError as error:
         return envelope("invalid_request", str(error))
     except StateConflict as error:
         return envelope("busy", str(error))
+    except ProvisioningError as error:
+        return envelope(error.outcome, str(error))
     except (HerdrError, UnsafePath) as error:
         return envelope("capability_blocked", str(error))
     except OSError as error:

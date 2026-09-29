@@ -123,6 +123,7 @@ def validate_run(value: object) -> dict:
     _version(obj)
     _id(obj, "run_id")
     _required(obj, "mission", str)
+    mode = _enum(obj, "mode", {"adopt_existing", "bootstrap_team"})
     _nonnegative(obj, "generation")
     _nonnegative(obj, "owner_epoch")
     scope = _object(_required(obj, "scope", dict), "scope")
@@ -160,6 +161,31 @@ def validate_run(value: object) -> dict:
         if key != assignment["assignment_id"] or assignment["run_id"] != obj["run_id"]:
             raise ContractError(f"assignments.{key}: identity mismatch")
     _required(obj, "outbox", dict)
+    for key in ("setup_plan", "setup_journal", "created_resources"):
+        _required(obj, key, list)
+    if mode == "adopt_existing":
+        if not obj["team_frozen"] or any(obj[key] for key in ("setup_plan", "setup_journal", "created_resources")):
+            raise ContractError("adopt_existing: frozen roster and empty setup journal required")
+    if mode == "bootstrap_team" and (not obj["bootstrap_authorized"] or not obj["setup_plan"]):
+        raise ContractError("setup_plan: authorized bootstrap requires a plan")
+    if mode == "bootstrap_team":
+        if len(obj["setup_plan"]) != len(obj["setup_journal"]):
+            raise ContractError("setup_journal: length differs from plan")
+        for index, item in enumerate(obj["setup_journal"]):
+            item = _object(item, f"setup_journal[{index}]")
+            if item.get("state") not in {"planned", "split_pending", "pane_created", "launch_pending", "active"}:
+                raise ContractError(f"setup_journal[{index}].state: invalid")
+            if item.get("pane_id") is not None:
+                _herdr_id(item, "pane_id", f"setup_journal[{index}]")
+        resource_panes = set()
+        for index, item in enumerate(obj["created_resources"]):
+            item = _object(item, f"created_resources[{index}]")
+            if item.get("type") != "pane":
+                raise ContractError(f"created_resources[{index}].type: invalid")
+            pane_id = _herdr_id(item, "pane_id", f"created_resources[{index}]")
+            if pane_id in resource_panes:
+                raise ContractError(f"created_resources[{index}].pane_id: duplicate")
+            resource_panes.add(pane_id)
     return obj
 
 

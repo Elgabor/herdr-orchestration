@@ -24,6 +24,20 @@ def _claim_key(session_id: str, pane_id: str) -> str:
     return f"pane-{digest}"
 
 
+def binding_for_agent(agent: dict, scope: dict, member_id: str, label: str, *, created_by_run: bool) -> dict:
+    conversation = _conversation(agent)
+    return {
+        "member_id": member_id, "label": label, "harness": agent["agent"],
+        "session_id": scope["session_id"], "workspace_id": scope["workspace_id"],
+        "tab_id": scope["tab_id"], "pane_id": agent["pane_id"],
+        "terminal_id": agent["terminal_id"],
+        "occupant_revision": agent["revision"],
+        "identity_status": "verified" if conversation else "unknown",
+        "agent_alias": agent.get("name"), "conversation_id": conversation,
+        "created_by_run": created_by_run,
+    }
+
+
 def inspect_team(client: HerdrClient, environ: dict | None = None) -> tuple[dict, dict]:
     """Return compact public view and a private binding view.
 
@@ -131,36 +145,18 @@ def adopt_existing(config: dict, private: dict, store: StateStore) -> dict:
         if plan.get("agent_alias") is not None and plan["agent_alias"] != agent.get("name"):
             raise ContractError(f"members[{index}].agent_alias: live alias differs")
         used.add(pane_id)
-        conversation = _conversation(agent)
-        members.append({
-            "member_id": plan["member_id"], "label": plan["label"],
-            "harness": agent["agent"], "session_id": scope["session_id"],
-            "workspace_id": scope["workspace_id"], "tab_id": scope["tab_id"],
-            "pane_id": pane_id, "terminal_id": agent["terminal_id"],
-            "occupant_revision": agent["revision"],
-            "identity_status": "verified" if conversation else "unknown",
-            "agent_alias": agent.get("name"), "conversation_id": conversation,
-            "created_by_run": False,
-        })
-    owner_conversation = _conversation(owner_agent)
-    owner = {
-        "member_id": "owner", "label": "Owner", "harness": owner_agent["agent"],
-        "session_id": scope["session_id"], "workspace_id": scope["workspace_id"],
-        "tab_id": scope["tab_id"], "pane_id": scope["owner_pane_id"],
-        "terminal_id": owner_agent["terminal_id"],
-        "occupant_revision": owner_agent["revision"],
-        "identity_status": "verified" if owner_conversation else "unknown",
-        "agent_alias": owner_agent.get("name"),
-        "conversation_id": owner_conversation, "created_by_run": False,
-    }
+        members.append(binding_for_agent(agent, scope, plan["member_id"], plan["label"], created_by_run=False))
+    owner = binding_for_agent(owner_agent, scope, "owner", "Owner", created_by_run=False)
     run = {
         "schema_version": SCHEMA_VERSION, "run_id": config["run_id"],
+        "mode": "adopt_existing",
         "mission": config["mission"], "generation": 0, "owner_epoch": 1,
         "scope": scope, "owner": owner, "execution_mode": execution_mode,
         "parallel_authorized": config["parallel_authorized"],
         "bootstrap_authorized": config["bootstrap_authorized"],
         "team_frozen": True, "pause_dispatch": False,
         "members": members, "assignments": {}, "outbox": {},
+        "setup_plan": [], "setup_journal": [], "created_resources": [],
     }
     validate_run(run)
     claims = [_claim_key(scope["session_id"], pane) for pane in used]

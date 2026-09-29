@@ -1,0 +1,22 @@
+{
+  "mode": "bootstrap_team",
+  "run_id": "example-bootstrap",
+  "mission": "Return the approved assignment to this owner",
+  "bootstrap_authorized": true,
+  "execution_mode": "sequential",
+  "parallel_authorized": false,
+  "setup_plan": [
+    {
+      "member_id": "worker-1",
+      "label": "Worker 1",
+      "agent_alias": "worker-1",
+      "harness": "pi",
+      "cwd": "/absolute/path/to/approved/project",
+      "source": "split",
+      "parent_pane_id": "w1:p1",
+      "direction": "right",
+      "ratio": 0.5,
+      "argv": []
+    }
+  ]
+}

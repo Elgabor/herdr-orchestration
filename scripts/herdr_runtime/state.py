@@ -155,8 +155,14 @@ class StateStore:
                 raise StateConflict("run identity or scope changed")
             if run["owner"] != current["owner"]:
                 raise StateConflict("owner binding changed")
+            for key in ("mode", "setup_plan", "bootstrap_authorized", "execution_mode", "parallel_authorized"):
+                if run[key] != current[key]:
+                    raise StateConflict(f"{key} changed after run initialization")
             if current["team_frozen"] and (run["members"] != current["members"] or not run["team_frozen"]):
                 raise StateConflict("frozen team changed")
+            if current["team_frozen"] and (run["setup_journal"] != current["setup_journal"]
+                                           or run["created_resources"] != current["created_resources"]):
+                raise StateConflict("frozen setup changed")
             _atomic_json(path, run)
         return run
 

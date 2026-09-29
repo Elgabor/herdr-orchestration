@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "run_id": "example-run",
+  "mode": "adopt_existing",
   "mission": "Coordinate the approved work and return results to the owner",
   "generation": 0,
   "owner_epoch": 1,
@@ -48,5 +49,8 @@
     }
   ],
   "assignments": {},
-  "outbox": {}
+  "outbox": {},
+  "setup_plan": [],
+  "setup_journal": [],
+  "created_resources": []
 }

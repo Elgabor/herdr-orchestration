@@ -3,7 +3,8 @@
 - Spec: HERDR-ORCHESTRATION-SPEC-v1.0, 2026-09-29. Work checkout initial HEAD:
   `81c22c9b09e3bf9e7708dcac068528f85c490454`.
 - T01: DONE, commit `67a45f4`. T03: DONE, commit `ecb4332` (13 offline tests).
-  T04: implementation and fixture tests complete; commit pending. T02 remains
+  T04: DONE, commit `4e2aca9`. T05: implementation and tests complete,
+  commit pending. T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
   complete four-owner support; Codex/Claude/OpenCode owners are unverified.
@@ -23,5 +24,11 @@
   woke the same owner session. Unsent editor text survived a second return.
 - NOT RUN: Codex/Claude/OpenCode owner return; Claude lacks credits. Codex
   startup hit a trust prompt, which was declined. No integration was updated.
-- Next: commit T04, then evaluate T05 provisioning with offline fixtures;
-  integrate the Pi bridge with durable state after T06 contracts.
+- PASS: 31 offline tests for contracts, tab scope, provisioning and state.
+  Live `run init` stored an explicit one-worker plan before split; the first
+  `team prepare` recorded pane `w3:p2` but found its shell not yet ready.
+  The same pane was reused on retry, Pi started there, and roster froze at
+  generation 6. Global focus remained at `w2:p1`; no second split occurred.
+- Next: commit T05, then T06 harness identity/reset characterization and
+  independent offline adapters. Integrate the Pi return bridge after native
+  session semantics and durable event contracts are established.
