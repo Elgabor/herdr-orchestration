@@ -57,6 +57,12 @@ state to screen-manifest fallback, not the new plugin, and no session ID was
 reported. It exited after two Ctrl-C presses. A scoped agent list was empty.
 No model turn or authentication change occurred for either probe.
 
+The dedicated test folder, including this isolated integration HOME, was
+removed after the final tests. A native OpenCode Go test consumed the
+existing account with test-local `XDG_CONFIG_HOME` before that removal;
+its two sessions were deleted separately. No daily integration version was
+changed.
+
 ## Unexecuted alternative: update the daily integrations
 
 The exact installer commands would be `herdr integration install pi`,

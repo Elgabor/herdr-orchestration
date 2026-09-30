@@ -57,8 +57,8 @@ A later OpenCode Go test kept the existing account data while redirecting only
 lifecycle hook authority. `/new` cleared the TUI, but the new native ID
 appeared only after the next turn. No assignment/result callback or owner
 return was tested, so OpenCode remains uncertified for those roles. The two
-native test sessions are listed in [live verification](live-verification.md)
-for scoped cleanup.
+native test sessions and their deletion are recorded in
+[live verification](live-verification.md).
 
 The user subsequently authorized low-cost LLM tests in a dedicated folder.
 Claude Code has no credits. [The Pi owner gate](return-capability.md) found

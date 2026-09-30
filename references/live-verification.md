@@ -96,9 +96,9 @@ the TUI in the same pane, but Herdr still reported the previous session ID
 until the next model turn. That turn replied `OC_NEW_OK` and reported native
 session `ses_f0d5491e5ffeMmCu8soAX6FY4V`. This certifies OpenCode Go
 access and the v13 lifecycle during turns. Immediate reset identity before
-a new turn and owner return remain **BLOCKED**. Both test sessions are
-designated for deletion during final cleanup; existing OpenCode sessions
-are untouched.
+a new turn and owner return remain **BLOCKED**. Both test sessions were
+subsequently deleted with OpenCode's native command; existing OpenCode
+sessions were untouched.
 
 ## Same-process Pi listener reattachment
 
@@ -144,6 +144,23 @@ recorded. No savings percentage is asserted. The test Pi TUI displayed
 usage/cost estimates, but they cover whole sessions rather than matching
 single scenarios and are not treated as account quota.
 
+## Final test cleanup
+
+After all test agents exited, `herdr session stop` and `session delete`
+removed only `herdr-orchestration-v1-test`. The entire dedicated
+`/Users/lorenzoborgato/code/herdr-orchestration-test` tree, including its
+synthetic Git repository, session files and isolated integrations, was
+removed after inventory; existence checks passed. The two OpenCode Go test
+session IDs above were deleted and no longer appear in native session list.
+Codex CLI deletion succeeded for test session
+`01a0f0a5-6d2e-70b2-b1fb-63a9f03233f5`. Deletion of the second reported
+ID `01a0f0a6-f04b-7b71-812d-5841aa05bbe4` returned an error; no matching
+saved file was found in the checked Codex session and archive directories.
+The test-folder trust stanza was removed from `~/.codex/config.toml`.
+The default Herdr session and unrelated harness sessions were left alone.
+Shared OpenCode runtime logs were not attributed to this test and were not
+deleted.
+
 ## Remaining gates and precise next action
 
 - **Codex owner/worker:** the dedicated-folder trust decision is resolved.
@@ -154,11 +171,12 @@ single scenarios and are not treated as account quota.
 - **Claude Code:** obtain account credit authorization and refresh its
   outdated Herdr integration only after explicit authorization; then run
   the owner and worker gates on an isolated test session.
-- **OpenCode:** authorize an integration update or certify the installed v11
-  behavior against v13's contract, then prove native callback and reset.
-- **Pi:** implement and test active listener reattachment after interruption,
-  versioned amendment while a worker is gated, lost-result/error callbacks,
-  optional goal pause, and visibility in the real TUI.
+- **OpenCode:** the test-local v13 lifecycle worked with OpenCode Go. Prove a
+  native owner callback and immediate reset identity; the daily v11 plugin
+  remains untouched.
+- **Pi:** same-process listener reattachment passed. Test a live versioned
+  amendment, lost-result/error callbacks, optional goal pause and TUI
+  visibility.
 - **Core:** strengthen checkout race detection for concurrent external writes,
   implement identity-safe cleanup, `events_lost` reconciliation, safe owner
   transfer and an end-to-end direct
@@ -167,4 +185,5 @@ single scenarios and are not treated as account quota.
   from [scenarios](../evals/scenarios.json) with separately authorized live
   accounts and budget.
 
-No push, PR, merge, release, deploy or global installation was performed.
+The feature branch was pushed after the user explicitly requested it. No PR,
+merge, release, deploy or global integration installation was performed.

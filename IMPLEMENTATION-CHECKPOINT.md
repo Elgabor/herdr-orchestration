@@ -168,3 +168,13 @@
   prompt. The test agents exited and scoped agent list was empty. Owner
   process transfer and `events_lost` remain **NOT_RUN**. The immediately
   preceding bullet records the status before this gate.
+- Final local state: **PASS** 91 offline tests, Pi extension syntax check,
+  `git diff --check`, clean branch and scoped agent list of zero before
+  cleanup. Push of `feature/herdr-orchestration-v1` succeeded. The dedicated
+  Herdr session and test tree were deleted, as were both OpenCode Go sessions,
+  the first saved Codex test session and the test-folder trust stanza. The
+  second Codex ID returned a deletion error and no saved file was found.
+  Four-harness owner/worker certification, T14 behavioral evals, native goal
+  and cancel adapters, direct route, owner transfer, `events_lost`, and
+  identity-safe runtime cleanup remain **BLOCKED/NOT_RUN** as recorded in
+  `evals/coverage.md`.
