@@ -95,6 +95,15 @@ class AssignmentTests(unittest.TestCase):
         template["assignment"]["conversation_id"] = "/test/worker.jsonl"
         self.assertEqual(validate_dispatch_config(template)["assignment"]["member_id"], "worker-1")
 
+    def test_fixed_worker_contract_has_bounded_context(self):
+        from herdr_runtime.assignment import _packet
+        config = copy.deepcopy(self.config)
+        config.update(instructions=[], acceptance=[], entry_points=[], write_scope=[])
+        self.assertLessEqual(len(_packet(config, self.store.root).encode()), 1500)
+        config["result_path"] = "x" * 1100
+        with self.assertRaisesRegex(ValueError, "1,500 bytes"):
+            _packet(config, self.store.root)
+
     def test_unarmed_return_blocks_before_state_or_prompt(self):
         run = self.store.load_run("example-run")
         with self.assertRaisesRegex(AssignmentError, "return channel"):

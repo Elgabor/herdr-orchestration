@@ -92,7 +92,16 @@ def _packet(config: dict, state_root: Path) -> str:
                             "--state-dir", str(state_root)],
         "worker_boundary": "Work only within the assigned scope. Write the JSON result atomically; do not orchestrate other panes or change the team.",
     }
-    return "Herdr assignment contract (JSON):\n" + json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    prefix = "Herdr assignment contract (JSON):\n"
+    fixed = dict(body)
+    for key in ("instructions", "acceptance", "entry_points", "write_scope"):
+        fixed[key] = []
+    if len((prefix + json.dumps(fixed, ensure_ascii=False, separators=(",", ":"))).encode()) > 1500:
+        raise ContractError("worker contract: fixed fields exceed 1,500 bytes; use shorter approved paths")
+    packet = prefix + json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    if len(packet.encode()) > 64 * 1024:
+        raise ContractError("worker packet: exceeds 64 KiB")
+    return packet
 
 
 def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_generation: int,

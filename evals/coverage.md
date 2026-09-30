@@ -78,7 +78,7 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | R03 | PARTIAL | Pi planned setup passed; automatic cost choice blocked by unknown quota. |
 | R04 | PARTIAL | No hidden agent in code or tests; full live harness matrix absent. |
 | R05 | PARTIAL | Pi reset passed; other native reset adapters absent, repair live absent. |
-| R06 | PARTIAL | Bounded packet/result tested; 1,500-byte contract budget needs instrumented check. |
+| R06 | PARTIAL | Bounded packet/result and 1,500-byte fixed contract guard tested; other harness contexts unverified. |
 | R07 | PARTIAL | Pi event return passed; other owners and lost-listener return blocked. |
 | R08 | PARTIAL | Pi owner user turn before worker finish passed; amendment live absent. |
 | R09 | PARTIAL | No-goal Pi passed; paused native goal case absent. |

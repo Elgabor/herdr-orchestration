@@ -22,9 +22,12 @@
   T13: short SKILL.md, aligned references, examples U01–U10, package tests
   and reversible installation plan committed `f3acd7e`. No harness
   profile or installed skill changed.
-  T14: four additional dispatch fault/busy/release tests, ten unrun behavior
-  eval scenarios and explicit X01–X56/R01–R18 coverage report prepared;
-  commit pending. The full fault matrix is not complete.
+  T14: dispatch fault/busy/release tests, ten unrun behavior eval scenarios
+  and X01–X56/R01–R18 coverage report committed `c50e083`. The full fault
+  matrix is not complete.
+  T15: Pi-only live matrix, small scenario comparison, clean test-agent
+  shutdown and final limitations report prepared; commit pending. Full
+  four-harness live certification and TUI viewport proof remain NOT_RUN.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -90,9 +93,13 @@
 - PASS: T13 `SKILL.md` is 82 lines and about 670 words,
   under the 180-line/1,500-word budget. Local links, scenario IDs and Codex
   metadata were checked. No four-harness skill loading was live tested.
-- PASS: 74 offline tests, including result arriving during a wait, lost
+- PASS: 75 offline tests, including result arriving during a wait, lost
   transport reply after publication, busy owner before send, and result
-  collected while worker still working. `evals/scenarios.json` is a manifest,
+  collected while worker still working, plus fixed worker contract size guard.
+  `evals/scenarios.json` is a manifest,
   not a completed LLM eval; every real eval remains `NOT_RUN`.
-- Next: commit T14 coverage increment, then T15 live report and final audit.
+- PASS: dedicated Pi test agents exited via `/quit`; scoped snapshot shows
+  zero active agents. Test Herdr server remains running with test artifacts.
+- Next: commit T15 report and final audit. Complete critical missing adapters
+  only when their prerequisites and live tests are available.
   Remaining capability gaps must stay explicit in final delivery.
