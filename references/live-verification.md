@@ -8,8 +8,8 @@ were 0.9.2, protocol 22. The tested owner and worker were interactive Pi
 0.87.1 instances in `w5:p1` and `w5:p2`, each using
 `openai-codex/gpt-6-luna` with low thinking and test-local session
 directories. No integration, account, login, global skill or default model
-was changed. The tested result was read-only; repository-writing dispatch
-remains blocked by the missing snapshot verifier.
+was changed. The first tested result was read-only. A second Pi→Pi run used
+a fresh synthetic Git repository and the new clean-checkout snapshot gate.
 
 The Pi owner bridge passed a normal same-session return. Its worker prompt
 was sent once. While a deterministic gate held the worker, the owner
@@ -22,8 +22,19 @@ wording was not reloaded into that live process; the first wording led the
 owner to guess invalid CLI commands, then an explicit valid command
 collected the event. See [return evidence](return-capability.md).
 
-At the end of the test, `/quit` was sent only to test Pi `w5:p2` and
-`w5:p1`. A scoped server snapshot then reported **zero agents**. The named
+The second run bound owner `w6:p1` and worker `w6:p2` to the same named test
+session. `repo snapshot` recorded exact root, branch, HEAD and a clean token.
+The worker changed only synthetic `README.md`, ran `git diff --check`, and
+published a result bound to that base. The owner extension's revised exact
+collection command worked without an extra user prompt: state reached
+`collected` with its outbox event received. The changed checkout then caused
+`repo snapshot` to return `needs_reconcile` as designed. The write packet
+was 1,806 bytes including task text; its fixed contract was 1,495 bytes.
+This proves the tested Pi write path, not a general race-free Git lock or
+support for preexisting dirty worktrees.
+
+At the end of the tests, `/quit` was sent only to test Pi `w5:p2`, `w5:p1`,
+`w6:p2` and `w6:p1`. A scoped server snapshot then reported **zero agents**. The named
 test server and test files remain for review; no daily Herdr session was
 altered. The TUI was inspected through Herdr pane reads and lifecycle APIs;
 an independent visual check of actual viewport visibility was **NOT_RUN**.
@@ -38,7 +49,7 @@ reset, block and quota evidence.
 | --- | --- | --- | --- | --- |
 | Codex | NOT_RUN | BLOCKED credits | NOT_RUN | NOT_RUN |
 | Claude Code | BLOCKED credits | BLOCKED credits | BLOCKED credits | BLOCKED credits |
-| Pi | NOT_RUN | BLOCKED credits | **PARTIAL** read-only dispatch, wake, input, reset and collection passed | NOT_RUN |
+| Pi | NOT_RUN | BLOCKED credits | **PARTIAL** read-only and clean-repo write dispatch, wake, input, reset and collection passed | NOT_RUN |
 | OpenCode | NOT_RUN | BLOCKED credits | NOT_RUN | NOT_RUN |
 
 Codex 0.155.1 reached a directory trust prompt during the earlier owner
@@ -85,8 +96,9 @@ single scenarios and are not treated as account quota.
 - **Pi:** implement and test active listener reattachment after interruption,
   versioned amendment while a worker is gated, lost-result/error callbacks,
   optional goal pause, and visibility in the real TUI.
-- **Core:** implement repository snapshot verification, identity-safe cleanup,
-  `events_lost` reconciliation, safe owner transfer and an end-to-end direct
+- **Core:** strengthen checkout race detection for concurrent external writes,
+  implement identity-safe cleanup, `events_lost` reconciliation, safe owner
+  transfer and an end-to-end direct
   handoff grant before enabling those operations. Complete the `PARTIAL` and
   `NOT_RUN` entries in [coverage](../evals/coverage.md); run behavioral evals
   from [scenarios](../evals/scenarios.json) with separately authorized live

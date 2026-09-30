@@ -45,7 +45,8 @@ revision, scope, output path and acceptance. The default helper is
 `scripts/herdr_orchestrate.py`; paths in examples resolve from this skill
 directory. Read [worker contract](references/handoff-contract.md) when writing
 the task packet. A read-only task may write only its approved result outputs.
-Repo-writing dispatch is blocked until checkout snapshots are certified.
+Repo-writing dispatch requires `repo snapshot` on an exact clean Git checkout
+and an unchanged HEAD/snapshot at send time; dirty or changed checkouts block.
 
 Arm an observable same-owner return **before** dispatch. The tested Pi owner
 adapter is the process-local `adapters/pi/owner_return.ts`, loaded for that

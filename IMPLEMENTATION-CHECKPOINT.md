@@ -6,8 +6,8 @@
   T04: DONE, commit `4e2aca9`. T05: DONE, commit `c45afe9`.
   T06: Pi adapter committed `def8820`; other harnesses remain uncertified.
   T07: conservative quota reader/catalog committed `d1dbaee`.
-  T08: dispatch/result core and tests committed `f1e4013`; repository writes
-  await a certified checkout snapshot gate.
+  T08: dispatch/result core and tests committed `f1e4013`; clean Git checkout
+  snapshot gate added after T15, with a synthetic Pi→Pi write test passed.
   T09: Pi owner bridge, correlated outbox/ack, and live Pi→Pi return committed
   `c21c992`. Other owners and crash recovery remain uncertified.
   T10: versioned future instruction, dispatch pause and same-thread amendment
@@ -100,6 +100,10 @@
   not a completed LLM eval; every real eval remains `NOT_RUN`.
 - PASS: dedicated Pi test agents exited via `/quit`; scoped snapshot shows
   zero active agents. Test Herdr server remains running with test artifacts.
+- PASS: clean Git root/branch/HEAD/snapshot verified before repo dispatch;
+  dirty tracked/untracked work blocked. Live Pi→Pi synthetic repository write
+  modified only `README.md`, returned a correlated result and was collected
+  by the same owner. Four test agents have exited; scoped snapshot shows zero.
 - Next: commit T15 report and final audit. Complete critical missing adapters
   only when their prerequisites and live tests are available.
   Remaining capability gaps must stay explicit in final delivery.

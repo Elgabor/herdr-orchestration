@@ -54,7 +54,7 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | X40 | PARTIAL Q refuses invented ranking | NOT_RUN | E NOT_RUN; comparable-data choice absent. |
 | X41 | PASS U no goal dependency | PASS Pi without goal | Other harnesses NOT_RUN. |
 | X42 | NOT_RUN | NOT_RUN | Native goal pause adapter absent. |
-| X43 | PASS K/A parallel guard | NOT_RUN | E NOT_RUN; repo writer gate blocks. |
+| X43 | PASS K/A parallel and single-writer guard | PARTIAL Pi one clean repo writer | E NOT_RUN. |
 | X44 | PARTIAL U future instruction | NOT_RUN | Cancel BLOCKED; no live control. |
 | X45 | PARTIAL K/A grant validation | NOT_RUN | Direct route BLOCKED; E NOT_RUN. |
 | X46 | PASS U saved result recovery | PASS Pi same owner | Reopened owner with active worker BLOCKED. |
@@ -65,7 +65,7 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | X51 | PASS C/P scope/focus | PARTIAL Pi focus preserved | Concurrent client layout change NOT_RUN. |
 | X52 | PASS A/R one send/no transcript loop | PASS Pi quiet wait | E NOT_RUN; other owners blocked. |
 | X53 | PASS C version gate | PARTIAL live version match | Hook/schema drift live NOT_RUN. |
-| X54 | PASS A output allowlist | PASS Pi read-only result | Other worker harnesses NOT_RUN. |
+| X54 | PASS A output allowlist | PASS Pi read-only result and synthetic repo write | Other worker harnesses NOT_RUN. |
 | X55 | PASS N Pi config check | PASS Pi reset preserves config | Other worker harnesses BLOCKED. |
 | X56 | PASS PK links/metadata | NOT_RUN | Four-harness skill load absent. |
 

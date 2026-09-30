@@ -20,6 +20,7 @@ from herdr_runtime.assignment import AssignmentError, collect_event, dispatch, p
 from herdr_runtime.return_channel import PiReturnChannel
 from herdr_runtime.control import apply_control
 from herdr_runtime.recovery import confirm_resume, inspect_resume
+from herdr_runtime.snapshot import SnapshotError, clean_snapshot
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -65,6 +66,10 @@ def read_config(path: Path) -> dict:
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
+    repo = sub.add_parser("repo", help="Read-only clean checkout identity")
+    repo_sub = repo.add_subparsers(dest="repo_command", required=True)
+    snapshot = repo_sub.add_parser("snapshot")
+    snapshot.add_argument("--repo", required=True, type=Path)
     sub.add_parser("doctor", help="Read-only installed/server capability report")
     team = sub.add_parser("team", help="Inspect the caller's Herdr tab")
     team_sub = team.add_subparsers(dest="team_command", required=True)
@@ -151,6 +156,9 @@ def state_dir(override: Path | None) -> Path:
 def main() -> int:
     args = parser().parse_args()
     try:
+        if args.command == "repo":
+            observed = clean_snapshot(args.repo)
+            return envelope("ok", "clean checkout identity; no file content read", **observed)
         if args.command == "quota":
             profiles = validate_catalog(read_config(args.catalog))
             profile = next((item for item in profiles if item["profile_id"] == args.profile_id), None)
@@ -277,6 +285,8 @@ def main() -> int:
         return envelope(error.outcome, str(error))
     except AssignmentError as error:
         return envelope(error.outcome, str(error))
+    except SnapshotError as error:
+        return envelope("needs_reconcile", str(error))
     except (HerdrError, UnsafePath) as error:
         return envelope("capability_blocked", str(error))
     except OSError as error:

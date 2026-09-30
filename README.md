@@ -10,8 +10,9 @@ results. It does not choose a development process, team size or parallelism.
 The package targets Herdr 0.9.2, protocol 22. Pi 0.87.1 has a tested
 process-local owner return bridge and native worker reset in a dedicated
 session. Codex, Claude Code and OpenCode owner return/reset combinations are
-not certified. Repository-writing assignments are blocked until checkout
-snapshot verification is implemented. See the [compatibility matrix](references/compatibility.md)
+not certified. Repository-writing assignments require a clean Git checkout,
+an exact HEAD/snapshot binding and a tested return channel; the synthetic
+Pi→Pi write case passed. See the [compatibility matrix](references/compatibility.md)
 and [return evidence](references/return-capability.md) before use. The old
 `herdr_agent_turn.py --agent ... --prompt-file ...` interface fails closed.
 

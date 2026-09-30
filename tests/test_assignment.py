@@ -287,9 +287,37 @@ class AssignmentTests(unittest.TestCase):
         self.config["assignment"].update(repo=str(self.root), base_head="a" * 40,
                                           work_snapshot="unverified")
         self.config["write_scope"] = ["src"]
-        with self.assertRaisesRegex(AssignmentError, "snapshot verification"):
+        with self.assertRaisesRegex(AssignmentError, "checkout inspection"):
             self.send()
         self.assertEqual(self.channel.sends, [])
+
+    def test_clean_repo_assignment_dispatches_and_changed_base_blocks(self):
+        from test_snapshot import make_repo
+        from herdr_runtime.snapshot import clean_snapshot
+        repo = make_repo(self.root)
+        observed = clean_snapshot(repo)
+        self.config["assignment"].update(repo=observed["repo"],
+                                          base_head=observed["base_head"],
+                                          work_snapshot=observed["work_snapshot"])
+        self.config["write_scope"] = ["README.md"]
+        run = self.send()
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "active")
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_dirty_repo_blocks_before_prompt(self):
+        from test_snapshot import make_repo
+        from herdr_runtime.snapshot import clean_snapshot
+        repo = make_repo(self.root)
+        observed = clean_snapshot(repo)
+        self.config["assignment"].update(repo=observed["repo"],
+                                          base_head=observed["base_head"],
+                                          work_snapshot=observed["work_snapshot"])
+        self.config["write_scope"] = ["README.md"]
+        (repo / "README.md").write_text("preexisting change\n")
+        with self.assertRaisesRegex(AssignmentError, "existing tracked"):
+            self.send()
+        self.assertEqual(self.channel.sends, [])
+        self.assertEqual(self.store.load_run("example-run")["assignments"], {})
 
     def test_read_only_packet_has_explicit_output_path_and_no_project_write(self):
         self.send()

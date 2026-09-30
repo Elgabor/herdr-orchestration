@@ -14,6 +14,7 @@ from .contracts import (ContractError, ID, MAX_RESULT_BYTES, SCHEMA_VERSION,
                         validate_result_binding)
 from .state import StateStore
 from .transport import HerdrClient
+from .snapshot import SnapshotError, clean_snapshot
 
 
 class AssignmentError(RuntimeError):
@@ -59,6 +60,13 @@ def validate_dispatch_config(config: dict) -> dict:
             raise ContractError("continuation_of: invalid")
     if assignment["repo"] is None and config["write_scope"]:
         raise ContractError("write_scope: research without repo cannot claim project writes")
+    if assignment["repo"] is not None:
+        if not Path(assignment["repo"]).is_absolute() or not assignment["base_head"] or not assignment["work_snapshot"]:
+            raise ContractError("repo: absolute checkout, base_head and work_snapshot required")
+        for value in config["write_scope"]:
+            if (Path(value).is_absolute() or any(part in {"", ".", ".."} for part in value.split("/"))
+                    or "\\" in value or "\x00" in value):
+                raise ContractError("write_scope: expected safe relative paths")
     if config.get("route_grant") is not None:
         grant = config["route_grant"]
         if (not isinstance(grant, dict) or set(grant) != {"grant_id", "route", "target_member_id", "max_hops"}
@@ -135,7 +143,14 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     if assignment["conversation_id"] != member["conversation_id"] or assignment["context_key"] != member.get("context_key"):
         raise AssignmentError("identity_changed", "native conversation/context differs; reset a distinct assignment first")
     if assignment["repo"] is not None:
-        raise AssignmentError("capability_blocked", "repository snapshot verification is not certified yet")
+        try:
+            observed = clean_snapshot(Path(assignment["repo"]))
+        except SnapshotError as error:
+            raise AssignmentError("needs_reconcile", str(error)) from error
+        if (observed["repo"], observed["base_head"], observed["work_snapshot"]) != (
+            assignment["repo"], assignment["base_head"], assignment["work_snapshot"]
+        ):
+            raise AssignmentError("needs_reconcile", "checkout snapshot differs from assigned base")
     if assignment["return_to"] != "owner":
         raise AssignmentError("capability_blocked", "direct relay is not authorized")
     grant = config.get("route_grant")

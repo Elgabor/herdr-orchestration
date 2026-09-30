@@ -1,0 +1,55 @@
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from herdr_runtime.snapshot import SnapshotError, clean_snapshot  # noqa: E402
+
+
+def make_repo(root: Path) -> Path:
+    repo = root / "project"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, capture_output=True)
+    (repo / "README.md").write_text("start\n")
+    subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test",
+                    "-c", "user.email=test@example.invalid", "commit", "-qm", "initial"],
+                   check=True, capture_output=True)
+    return repo
+
+
+class SnapshotTests(unittest.TestCase):
+    def test_clean_identity_is_stable_and_dirt_blocks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = make_repo(Path(directory))
+            observed = clean_snapshot(repo)
+            self.assertEqual(observed["repo"], str(repo.resolve()))
+            self.assertEqual(observed["branch"], "main")
+            self.assertEqual(observed, clean_snapshot(repo))
+            (repo / "README.md").write_text("changed\n")
+            with self.assertRaisesRegex(SnapshotError, "existing tracked"):
+                clean_snapshot(repo)
+
+    def test_untracked_nested_and_symlink_checkout_block(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = make_repo(root)
+            (repo / "untracked.txt").write_text("data")
+            with self.assertRaisesRegex(SnapshotError, "untracked"):
+                clean_snapshot(repo)
+            (repo / "untracked.txt").unlink()
+            (repo / "sub").mkdir()
+            with self.assertRaisesRegex(SnapshotError, "exact Git checkout root"):
+                clean_snapshot(repo / "sub")
+            link = root / "linked"
+            link.symlink_to(repo, target_is_directory=True)
+            with self.assertRaisesRegex(SnapshotError, "non-symlink"):
+                clean_snapshot(link)
+
+
+if __name__ == "__main__":
+    unittest.main()

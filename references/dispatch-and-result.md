@@ -13,8 +13,13 @@ conflicts. It requires a return channel to be armed, then persists
 `dispatching` with a handle. A lost send response is
 `delivery_uncertain`; the same assignment ID cannot be resent. The Pi owner
 bridge supplies the tested return path when its process-local command has
-armed a private proof. Other owner harnesses remain blocked. Repository
-assignments remain blocked until their checkout snapshot can be verified.
+armed a private proof. Other owner harnesses remain blocked. `repo snapshot`
+reads a clean checkout's canonical root, branch and HEAD without reading file
+content. The assignment must carry that exact token; `dispatch` rechecks it
+before sending. Existing tracked or untracked changes block the assignment,
+and a repository writer must have a safe relative `write_scope`. An external
+mutation between the final check and the worker's first action is still a
+checkout race, so the owner must review the final diff before acceptance.
 
 `assignment publish` is available to the assigned worker pane after a
 dispatch exists. It reads at most 12 KiB from a safe relative path beneath
