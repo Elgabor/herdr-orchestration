@@ -64,8 +64,8 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | X50 | PARTIAL K rejects handoff command | NOT_RUN | E NOT_RUN; quota redaction fault absent. |
 | X51 | PASS C/P scope/focus | PARTIAL Pi focus preserved | Concurrent client layout change NOT_RUN. |
 | X52 | PASS A/R one send/no transcript loop | PASS Pi quiet wait | E NOT_RUN; other owners blocked. |
-| X53 | PASS C version gate | PARTIAL live version match | Hook/schema drift live NOT_RUN. |
-| X54 | PASS A output allowlist | PASS Pi read-only result and synthetic repo write | Other worker harnesses NOT_RUN. |
+| X53 | PASS C version gate | PARTIAL live match; Codex lifecycle `unknown` | Hook/schema drift recovery NOT_RUN. |
+| X54 | PASS A output allowlist and Git path/branch checks | PASS Pi read-only result and synthetic repo write | Git publication hardening is offline only; other workers NOT_RUN. |
 | X55 | PASS N Pi config check | PASS Pi reset preserves config | Other worker harnesses BLOCKED. |
 | X56 | PASS PK links/metadata | NOT_RUN | Four-harness skill load absent. |
 
@@ -88,6 +88,6 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | R13 | PARTIAL | Process-local Pi bridge passed; other harness adapters absent. |
 | R14 | PARTIAL | Same-owner completed run resumed; active listener/owner transfer blocked. |
 | R15 | PARTIAL | Correlated Pi result passed; full error/revision live matrix absent. |
-| R16 | PARTIAL | State/result private offline; final diff audit still required. |
+| R16 | PARTIAL | State/result private offline and final diff audit clean; cross-harness runtime context not certified. |
 | R17 | PARTIAL | Baseline recorded; only Pi path live certified. |
 | R18 | PARTIAL | No blind retry; cleanup and full crash windows absent. |

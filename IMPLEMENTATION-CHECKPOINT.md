@@ -132,6 +132,11 @@
 - PASS: 86 offline tests. A result publication on a different branch or
   rewound HEAD now needs reconciliation, while a forward commit on the
   assigned branch remains eligible for path review.
-- Next: final audit. Complete critical missing adapters
-  only when their prerequisites and live tests are available.
-  Remaining capability gaps must stay explicit in final delivery.
+- PASS: final local audit found a clean branch worktree, no whitespace errors
+  versus `origin/main`, no runtime state in tracked files, 86 passing offline
+  tests, and a skill of 83 lines / 684 words. No push or publication.
+- Remaining: complete critical missing adapters only when their prerequisites
+  and live tests are available. Pi active listener reattach, identity-safe
+  cleanup, direct route execution and wider fault windows remain unfinished
+  code work; four-owner certification and account-backed checks remain
+  blocked or unrun as detailed in the coverage matrix.
