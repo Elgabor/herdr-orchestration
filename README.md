@@ -1,44 +1,64 @@
 # Herdr Orchestration
 
-This Agent Skill teaches Codex, Claude Code, Pi and OpenCode how to use Herdr
-as a terminal control plane. The owner assigns scoped work to real panes,
-preserves its native conversation for user input, and receives compact worker
-results. It does not choose a development process, team size or parallelism.
+A skill that helps your coding agent work with other agents in
+[Herdr](https://herdr.dev/), where they run in separate terminal panes.
 
-## Current support
+You talk to your main agent. It gives another agent a task, collects the
+result, and brings it back to your conversation.
 
-The package targets Herdr 0.9.2, protocol 22. Pi 0.87.1 has a tested
-process-local owner return bridge and native worker reset in a dedicated
-session. Codex, Claude Code and OpenCode owner return/reset combinations are
-not certified. Repository-writing assignments require a clean Git checkout,
-an exact HEAD/snapshot binding and a tested return channel; the synthetic
-Pi→Pi write case passed. See the [compatibility matrix](references/compatibility.md)
-and [return evidence](references/return-capability.md) before use. The old
-`herdr_agent_turn.py --agent ... --prompt-file ...` interface fails closed.
+## Why use it?
 
-## Contents
+Coordinating several agents usually means passing instructions between them
+and keeping track of their work. This skill gives your main agent a consistent
+way to handle that coordination.
 
-| Path | Use |
-| --- | --- |
-| [SKILL.md](SKILL.md) | Short activation and operating procedure. |
-| [scripts/herdr_orchestrate.py](scripts/herdr_orchestrate.py) | Scoped CLI for team, conversation, assignment, control and resume. |
-| [adapters/pi](adapters/pi) | Process-local Pi reset and owner return bridges. |
-| [references/handoff-contract.md](references/handoff-contract.md) | Worker packet and result fields. |
-| [references/recovery.md](references/recovery.md) | Same-owner recovery limits. |
-| [templates](templates) | JSON examples to bind to a real run. |
-| [tests](tests) | Offline fixtures and fault tests. |
+- **Less manual coordination:** your agent handles assignments and results.
+- **Clear tasks:** each worker gets the context it needs and limits on its work.
+- **Results you can review:** the main agent checks what came back before
+  deciding the next step.
 
-Run the offline suite with `python3 -m unittest discover -s tests -q` from
-this directory. It uses the standard library and no live account. For a
-production run, use only the adapter capabilities certified for the installed
-versions. A real owner must be inside the intended Herdr pane (`HERDR_ENV=1`).
+You choose the task, the agents involved and their models.
 
-The [installation and rollback guide](references/installation.md) describes
-one canonical copy and local harness discovery paths. It is a plan; this
-repository does not install software, edit global profiles or enable bridges
-automatically. [Examples U01–U10](references/scenarios.md) show the intended
-behavior and current capability boundaries.
+## Install
+
+Paste this prompt into your coding agent, whether you use Codex, Claude Code,
+Pi or OpenCode:
+
+```text
+Install herdr-orchestration for the harness we are using.
+
+Find the appropriate skills folder, alongside my existing skills or in this
+project, and clone the repository there:
+git clone https://github.com/Elgabor/herdr-orchestration.git
+
+Preserve existing installations. Read SKILL.md and references/installation.md,
+verify that this harness can load the skill, and tell me how to use it.
+```
+
+The agent handles the installation details for your harness. Keep the whole
+skill folder so it has the instructions, scripts and references it needs.
+
+## Use
+
+To coordinate work, you need Herdr and your coding agents set up. Then ask
+your main agent for the task you want to delegate. For example:
+
+> Use herdr-orchestration to have the existing worker investigate the failing
+> test and report the likely cause, without changing project files.
+
+The agent follows the skill's instructions and checks that your setup supports
+the task. You review the result and decide what happens next.
+
+The complete workflow has currently been verified with Pi running both agents.
+Other harnesses can load the skill, but returning results to their main
+conversation is still unverified. See the [support details](references/compatibility.md).
+
+## Instructions for the agent
+
+Read [SKILL.md](SKILL.md) for the operating procedure and the
+[installation guide](references/installation.md) for harness-specific setup.
+Follow their capability checks before sending work to another agent.
 
 ## License
 
-Released under the [MIT License](LICENSE). Copyright © 2026 Lorenzo Borgato.
+[MIT](LICENSE). Copyright © 2026 Lorenzo Borgato.
