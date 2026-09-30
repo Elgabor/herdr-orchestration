@@ -64,6 +64,22 @@ class SnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(SnapshotError, "assigned base_head invalid"):
                 changed_paths(Path(observed["repo"]), "not-a-commit")
 
+    def test_rename_exposes_removed_and_added_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = make_repo(Path(directory))
+            (repo / "outside.txt").write_text("content moved into allowed scope\n")
+            subprocess.run(["git", "-C", str(repo), "add", "outside.txt"],
+                           check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit", "-qm", "second"],
+                           check=True, capture_output=True)
+            observed = clean_snapshot(repo)
+            (repo / "allowed").mkdir()
+            subprocess.run(["git", "-C", str(repo), "mv", "outside.txt", "allowed/moved.txt"],
+                           check=True, capture_output=True)
+            self.assertEqual(changed_paths(Path(observed["repo"]), observed["base_head"]),
+                             {"outside.txt", "allowed/moved.txt"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -127,6 +127,8 @@
   Herdr's `idle` came from screen fallback and no native session appeared.
   Both agents exited; scoped agent list is empty. Neither startup certifies
   a result callback or owner return.
+- PASS: 85 offline tests. A staged rename from outside to inside the allowed
+  path set now exposes both paths to `write_scope` validation.
 - Next: final audit. Complete critical missing adapters
   only when their prerequisites and live tests are available.
   Remaining capability gaps must stay explicit in final delivery.

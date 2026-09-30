@@ -25,7 +25,9 @@ For repository assignments, publication compares `files_changed` with Git's
 tracked and non-ignored untracked path names since the assigned HEAD. It
 rejects omissions, invented or duplicate names, and paths outside
 `write_scope`. Only the registered result JSON is excluded if it lives in
-the checkout; worker-declared artifacts cannot widen the scope. This checks
+the checkout; worker-declared artifacts cannot widen the scope. Git rename
+detection is disabled for this comparison so both the removed and added
+paths must be in scope. This checks
 paths, not file content, ignored files, concurrent writes after inspection,
 or the quality of the change. Owner diff review is still required.
 

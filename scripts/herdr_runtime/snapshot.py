@@ -59,7 +59,8 @@ def changed_paths(repo: Path, base_head: str) -> set[str]:
         raise SnapshotError("repo is no longer the assigned canonical checkout")
     if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", base_head):
         raise SnapshotError("assigned base_head invalid")
-    tracked = _git(repo, "diff", "--name-only", "-z", base_head, "--")
+    # A rename must expose both its old and new paths to write_scope checks.
+    tracked = _git(repo, "diff", "--no-renames", "--name-only", "-z", base_head, "--")
     untracked = _git(repo, "ls-files", "--others", "--exclude-standard", "-z")
     try:
         return {item.decode("utf-8") for item in (tracked + untracked).split(b"\0") if item}
