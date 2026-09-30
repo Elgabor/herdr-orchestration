@@ -7,7 +7,7 @@
   T06: Pi adapter committed `def8820`; other harnesses remain uncertified.
   T07: conservative quota reader/catalog committed `d1dbaee`.
   T08: dispatch/result core and tests committed `f1e4013`; clean Git checkout
-  snapshot gate added after T15, with a synthetic Pi→Pi write test passed.
+  snapshot gate and synthetic Pi→Pi write test committed `e21394e`.
   T09: Pi owner bridge, correlated outbox/ack, and live Pi→Pi return committed
   `c21c992`. Other owners and crash recovery remain uncertified.
   T10: versioned future instruction, dispatch pause and same-thread amendment
@@ -26,7 +26,8 @@
   and X01–X56/R01–R18 coverage report committed `c50e083`. The full fault
   matrix is not complete.
   T15: Pi-only live matrix, small scenario comparison, clean test-agent
-  shutdown and final limitations report prepared; commit pending. Full
+  shutdown and limitations report committed `5d063f7`, with write-case update
+  in `e21394e`. Full
   four-harness live certification and TUI viewport proof remain NOT_RUN.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
@@ -93,7 +94,7 @@
 - PASS: T13 `SKILL.md` is 82 lines and about 670 words,
   under the 180-line/1,500-word budget. Local links, scenario IDs and Codex
   metadata were checked. No four-harness skill loading was live tested.
-- PASS: 75 offline tests, including result arriving during a wait, lost
+- PASS: 79 offline tests, including result arriving during a wait, lost
   transport reply after publication, busy owner before send, and result
   collected while worker still working, plus fixed worker contract size guard.
   `evals/scenarios.json` is a manifest,
@@ -104,6 +105,6 @@
   dirty tracked/untracked work blocked. Live Pi→Pi synthetic repository write
   modified only `README.md`, returned a correlated result and was collected
   by the same owner. Four test agents have exited; scoped snapshot shows zero.
-- Next: commit T15 report and final audit. Complete critical missing adapters
+- Next: final audit. Complete critical missing adapters
   only when their prerequisites and live tests are available.
   Remaining capability gaps must stay explicit in final delivery.
