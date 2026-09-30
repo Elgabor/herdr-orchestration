@@ -104,11 +104,31 @@ def apply_control(client: HerdrClient, store: StateStore, config: dict,
         client.agent_prompt(member["pane_id"], packet)
     except HerdrError as error:
         latest = store.load_run(run["run_id"])
-        record = latest["assignments"][assignment["assignment_id"]]["amendments"][-1]
+        if latest["owner_epoch"] != owner_epoch:
+            raise AssignmentError("needs_reconcile", "owner changed during amendment delivery") from error
+        record = next((item for item in latest["assignments"][assignment["assignment_id"]]["amendments"]
+                       if item["amendment_id"] == config["amendment_id"]), None)
+        if record is None:
+            raise AssignmentError("needs_reconcile", "amendment changed during delivery") from error
+        if record["worker_ack"]:
+            return latest
         record["delivery"] = "uncertain"
-        _save(latest, store, owner_epoch)
+        try:
+            _save(latest, store, owner_epoch)
+        except StateConflict as conflict:
+            raise AssignmentError("needs_reconcile", "amendment state changed during delivery") from conflict
         raise AssignmentError("delivery_uncertain", "amendment delivery uncertain; do not resend") from error
     latest = store.load_run(run["run_id"])
-    record = latest["assignments"][assignment["assignment_id"]]["amendments"][-1]
+    if latest["owner_epoch"] != owner_epoch:
+        raise AssignmentError("needs_reconcile", "owner changed during amendment delivery")
+    record = next((item for item in latest["assignments"][assignment["assignment_id"]]["amendments"]
+                   if item["amendment_id"] == config["amendment_id"]), None)
+    if record is None:
+        raise AssignmentError("needs_reconcile", "amendment changed during delivery")
+    if record["worker_ack"]:
+        return latest
     record["delivery"] = "queued"
-    return _save(latest, store, owner_epoch)
+    try:
+        return _save(latest, store, owner_epoch)
+    except StateConflict as error:
+        raise AssignmentError("needs_reconcile", "amendment state changed during delivery") from error

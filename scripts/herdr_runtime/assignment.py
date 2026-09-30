@@ -376,6 +376,7 @@ def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignme
     assignment["result_status"] = result["status"]
     for amendment in assignment.get("amendments", []):
         amendment["worker_ack"] = True
+        amendment["delivery"] = "acknowledged"
     assignment["state"] = "result_received"
     event = {"schema_version": SCHEMA_VERSION, "run_id": run_id,
              "assignment_id": assignment_id, "revision": assignment["revision"],

@@ -132,6 +132,33 @@ class ControlTests(unittest.TestCase):
         published, _ = publish_result(self.client, self.store, "example-run", "example-assignment", self.root, "result.json")
         self.assertTrue(published["assignments"]["example-assignment"]["amendments"][0]["worker_ack"])
 
+    def test_result_during_amendment_delivery_keeps_worker_ack(self):
+        self.dispatch()
+        self.client.data["snapshot"]["agents"][1]["agent_status"] = "working"
+        result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+        result["conversation_id"] = "/test/worker.jsonl"
+        result["revision"] = 1
+        result["acknowledged_amendments"] = ["a1"]
+        (self.root / "result.json").write_text(json.dumps(result))
+
+        def publish_during_prompt(pane, packet):
+            self.client.prompts.append((pane, packet))
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+            publish_result(self.client, self.store, "example-run", "example-assignment",
+                           self.root, "result.json")
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+            return {"agent_status": "working"}
+
+        with patch.object(self.client, "agent_prompt", side_effect=publish_during_prompt):
+            run = self.control({"type": "amend_assignment", "assignment_id": "example-assignment",
+                                "expected_revision": 0, "amendment_id": "a1", "instruction": "Add finding"})
+        task = run["assignments"]["example-assignment"]
+        self.assertEqual(task["state"], "result_received")
+        self.assertTrue(task["amendments"][0]["worker_ack"])
+        self.assertEqual(task["amendments"][0]["delivery"], "acknowledged")
+        self.assertEqual(len(self.client.prompts), 1)
+        self.assertEqual(len(run["outbox"]), 1)
+
     def test_uncertified_cancel_and_goal_do_not_mutate_run(self):
         before = self.store.load_run("example-run")
         for operation in ({"type": "cancel_assignment", "assignment_id": "example-assignment"},
