@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import stat
 import time
@@ -28,6 +29,8 @@ def _save(run: dict, store: StateStore, owner_epoch: int) -> dict:
 
 
 def _proof(root: Path, nonce: str, operation: str, timeout: float = 5.0) -> dict:
+    if not re.fullmatch(r"[a-f0-9]{32}", nonce):
+        raise ResetError("invalid_request", "native proof nonce invalid")
     deadline = time.monotonic() + timeout
     path = root / f"{nonce}.json"
     while True:

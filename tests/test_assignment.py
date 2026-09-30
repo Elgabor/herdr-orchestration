@@ -10,7 +10,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from herdr_runtime.assignment import AssignmentError, dispatch, publish_result, validate_dispatch_config  # noqa: E402
+from herdr_runtime.assignment import (AssignmentError, collect_event, dispatch,
+                                      pending_events, publish_result,
+                                      validate_dispatch_config)  # noqa: E402
 from herdr_runtime.context import adopt_existing, inspect_team  # noqa: E402
 from herdr_runtime.state import StateStore  # noqa: E402
 
@@ -37,6 +39,7 @@ class Channel:
         self.store = store
         self.sends = []
         self.fail = False
+        self.completion = None
 
     def supports(self, owner, member):
         return owner["harness"] == member["harness"] == "pi"
@@ -50,6 +53,7 @@ class Channel:
         self.sends.append((pane_id, packet, handle))
         if self.fail:
             raise RuntimeError("transport response lost")
+        return self.completion
 
 
 class AssignmentTests(unittest.TestCase):
@@ -167,6 +171,48 @@ class AssignmentTests(unittest.TestCase):
                                 self.root, "result.json")
         self.assertEqual(run["assignments"]["example-assignment"]["result_status"], "blocked")
         self.assertFalse(next(iter(run["outbox"].values()))["received"])
+
+    def test_waited_completion_without_result_records_protocol_error(self):
+        self.channel.completion = {"agent_status": "done"}
+        run = self.send()
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "protocol_error")
+        key, event = next(iter(run["outbox"].items()))
+        self.assertEqual(event["event"]["type"], "protocol_error")
+        self.assertEqual(len(pending_events(self.client, self.store, "example-run", 1)), 1)
+        collected, result, released = collect_event(self.client, self.store, "example-run",
+                                                     "example-assignment", key, 1)
+        self.assertIsNone(result)
+        self.assertTrue(released)
+        self.assertTrue(collected["outbox"][key]["received"])
+
+    def test_unknown_worker_completion_needs_reconcile_without_resend(self):
+        self.channel.completion = {"agent_status": "unknown"}
+        run = self.send()
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "needs_reconcile")
+        self.assertEqual(run["outbox"], {})
+        with self.assertRaisesRegex(AssignmentError, "already exists"):
+            self.send()
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_owner_collects_result_once_and_checks_digest(self):
+        self.send()
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+        result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+        result["conversation_id"] = "/test/worker.jsonl"
+        (self.root / "result.json").write_text(json.dumps(result))
+        run, _ = publish_result(self.client, self.store, "example-run", "example-assignment",
+                                self.root, "result.json")
+        key = next(iter(run["outbox"]))
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+        self.assertEqual(len(pending_events(self.client, self.store, "example-run", 1)), 1)
+        first, value, released = collect_event(self.client, self.store, "example-run",
+                                                "example-assignment", key, 1)
+        self.assertEqual(value["status"], "done")
+        self.assertTrue(released)
+        self.assertEqual(first["assignments"]["example-assignment"]["state"], "collected")
+        second, _, _ = collect_event(self.client, self.store, "example-run", "example-assignment", key, 1)
+        self.assertEqual(second["generation"], first["generation"])
+        self.assertEqual(pending_events(self.client, self.store, "example-run", 1), [])
 
     def test_repo_dispatch_blocks_until_snapshot_is_verifiable(self):
         self.config["assignment"].update(repo=str(self.root), base_head="a" * 40,

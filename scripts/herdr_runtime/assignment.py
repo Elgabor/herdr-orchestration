@@ -63,7 +63,7 @@ def validate_dispatch_config(config: dict) -> dict:
     return config
 
 
-def _packet(config: dict) -> str:
+def _packet(config: dict, state_root: Path) -> str:
     assignment = config["assignment"]
     body = {
         "assignment": {key: assignment[key] for key in (
@@ -73,6 +73,11 @@ def _packet(config: dict) -> str:
         "entry_points": config["entry_points"], "write_scope": config["write_scope"],
         "result": {"root": config["result_root"], "path": config["result_path"],
                    "schema_version": SCHEMA_VERSION, "max_bytes": MAX_RESULT_BYTES},
+        "publish_command": ["python3", str(Path(__file__).resolve().parents[1] / "herdr_orchestrate.py"),
+                            "assignment", "publish", "--run-id", assignment["run_id"],
+                            "--assignment-id", assignment["assignment_id"],
+                            "--result-root", config["result_root"], "--result-path", config["result_path"],
+                            "--state-dir", str(state_root)],
         "worker_boundary": "Work only within the assigned scope. Write the JSON result atomically; do not orchestrate other panes or change the team.",
     }
     return "Herdr assignment contract (JSON):\n" + json.dumps(body, ensure_ascii=False, separators=(",", ":"))
@@ -120,8 +125,11 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     if channel is None or not channel.supports(run["owner"], member):
         raise AssignmentError("capability_blocked", "same-owner return channel is not armed for this harness")
 
-    packet = _packet(config)
-    handle = channel.arm(run, assignment, member)
+    packet = _packet(config, store.root)
+    try:
+        handle = channel.arm(run, assignment, member)
+    except (ValueError, OSError) as error:
+        raise AssignmentError("capability_blocked", "owner return arm proof invalid") from error
     saved = dict(assignment)
     saved["result_root"] = config["result_root"]
     saved["result_path"] = config["result_path"]
@@ -132,14 +140,37 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     run["assignments"][saved["assignment_id"]] = saved
     _save(run, store, owner_epoch)
     try:
-        channel.send(member["pane_id"], packet, handle)
+        completion = channel.send(member["pane_id"], packet, handle)
     except Exception as error:
-        saved["state"] = "delivery_uncertain"
-        _save(run, store, owner_epoch)
+        latest = store.load_run(run["run_id"])
+        current = latest["assignments"][saved["assignment_id"]]
+        if current["state"] == "result_received":
+            return latest
+        current["state"] = "delivery_uncertain"
+        _save(latest, store, owner_epoch)
         raise AssignmentError("delivery_uncertain", "task delivery uncertain; do not resend") from error
-    saved["state"] = "active"
-    _save(run, store, owner_epoch)
-    return run
+    latest = store.load_run(run["run_id"])
+    current = latest["assignments"][saved["assignment_id"]]
+    if current["state"] == "result_received":
+        return latest
+    if current["state"] != "dispatching":
+        raise AssignmentError("needs_reconcile", "assignment changed while waiting")
+    if completion is None:  # Offline fake channel; production wait returns a Herdr agent.
+        current["state"] = "active"
+        return _save(latest, store, owner_epoch)
+    lifecycle = completion.get("agent_status") if isinstance(completion, dict) else None
+    current["worker_lifecycle"] = lifecycle or "unknown"
+    if lifecycle in {"done", "idle", "blocked"}:
+        current["state"] = "blocked" if lifecycle == "blocked" else "protocol_error"
+        digest = hashlib.sha256(f"missing-result:{saved['assignment_id']}:{saved['revision']}".encode()).hexdigest()
+        event = {"schema_version": SCHEMA_VERSION, "run_id": run["run_id"],
+                 "assignment_id": saved["assignment_id"], "revision": saved["revision"],
+                 "attempt": saved["attempt"], "type": current["state"], "result_digest": digest}
+        key = event_id(event)
+        latest["outbox"][key] = {"event": event, "received": False, "action_intent": None, "applied": False}
+    else:
+        current["state"] = "needs_reconcile"
+    return _save(latest, store, owner_epoch)
 
 
 def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignment_id: str,
@@ -191,3 +222,56 @@ def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignme
     run["outbox"][key] = {"event": event, "received": False, "action_intent": None, "applied": False}
     _save(run, store, run["owner_epoch"])
     return run, result
+
+
+def pending_events(client: HerdrClient, store: StateStore, run_id: str, owner_epoch: int) -> list[dict]:
+    _, private = inspect_team(client)
+    run = store.load_run(run_id)
+    if run["owner_epoch"] != owner_epoch or run["scope"] != private["scope"]:
+        raise AssignmentError("needs_reconcile", "owner epoch or scope changed")
+    verify_binding(run["owner"], private["owner"], private["panes"].get(run["scope"]["owner_pane_id"]), run["scope"])
+    return [{"event_id": key, "assignment_id": value["event"]["assignment_id"],
+             "type": value["event"]["type"], "revision": value["event"]["revision"]}
+            for key, value in run["outbox"].items() if not value["received"]]
+
+
+def collect_event(client: HerdrClient, store: StateStore, run_id: str, assignment_id: str,
+                  event_key: str, owner_epoch: int) -> tuple[dict, dict | None, bool]:
+    _, private = inspect_team(client)
+    run = store.load_run(run_id)
+    if run["owner_epoch"] != owner_epoch or run["scope"] != private["scope"]:
+        raise AssignmentError("needs_reconcile", "owner epoch or scope changed")
+    verify_binding(run["owner"], private["owner"], private["panes"].get(run["scope"]["owner_pane_id"]), run["scope"])
+    assignment = run["assignments"].get(assignment_id)
+    item = run["outbox"].get(event_key)
+    if not assignment or not item or item["event"]["assignment_id"] != assignment_id:
+        raise AssignmentError("protocol_error", "event does not belong to the assignment")
+    event = item["event"]
+    if event["revision"] != assignment["revision"] or event["attempt"] != assignment["attempt"]:
+        if not item["received"]:
+            item["received"] = True
+            _save(run, store, owner_epoch)
+        raise AssignmentError("stale_event", "event predates current assignment revision")
+    result = None
+    if event["type"] == "result_ready":
+        try:
+            result = read_result_file(Path(assignment["result_root"]), assignment["result_path"])
+            validate_result_binding(result, assignment)
+        except ContractError as error:
+            raise AssignmentError("protocol_error", f"recorded result no longer valid: {error}") from error
+        digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if digest != event["result_digest"] or digest != assignment.get("result_digest"):
+            raise AssignmentError("protocol_error", "result digest changed after publication")
+    elif event["type"] not in {"protocol_error", "blocked", "interrupted"}:
+        raise AssignmentError("protocol_error", "unsupported event type")
+    member = next((member for member in run["members"]
+                   if member["member_id"] == assignment["member_id"]), None)
+    worker = next((agent for agent in private["agents"]
+                   if member and agent["pane_id"] == member["pane_id"]), None)
+    released = bool(worker and worker.get("agent_status") in {"idle", "done"})
+    if not item["received"]:
+        item["received"] = True
+        if result is not None:
+            assignment["state"] = "collected"
+        _save(run, store, owner_epoch)
+    return run, result, released

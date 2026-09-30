@@ -74,3 +74,35 @@ behavior in the interactive pane while the delegated worker was active.
 No UI notification, detached PID, background `--wait`, or `/goal` is treated
 as proof of owner return. Critical dispatch remains disabled until its owner
 adapter satisfies the whole gate.
+
+## Production Pi bridge exercise, 2026-09-30
+
+In the same dedicated named session, a new `w5` workspace held Pi owner
+`w5:p1` and Pi worker `w5:p2`, both on `openai-codex/gpt-6-luna` with low
+thinking and separate test-local session directories. The owner loaded
+`adapters/pi/owner_return.ts` by `--extension`; the worker loaded the native
+context extension by path. An adopted run was frozen in that tab, and the
+worker's `/new` established the assignment context key.
+
+The owner issued `/herdrdispatch` once. The private arm proof matched the
+owner session, pane, epoch, generation, and process PID. State reached
+`dispatching` and the worker began a deterministic file gate. While that gate
+remained closed and Herdr still reported the worker `working`, a separate user
+prompt to the owner completed and wrote `return-task-1.steered`. After the
+gate was released, the worker published one correlated JSON result. The Pi
+extension delivered a native user message to the **same owner session** with
+the event ID; that turn completed without a manual wake. The owner then ran
+`assignment collect` and the run reached `collected`, with its outbox entry
+`received=true` and `worker_released=true`. No assignment was redispatched.
+
+The first wake message asked the owner to inspect and collect but omitted CLI
+syntax. The owner guessed nonexistent `run inspect` and `events collect`
+commands. The extension was corrected to include the exact `assignment
+collect` or `assignment pending` command. The corrected wording has offline
+review but was not reloaded into the live Pi process in this exercise.
+
+This certifies the tested Pi→Pi normal return, pre-completion user turn,
+same-session wake, and correlated collection path. It does **not** certify
+Pi crash recovery, `events_lost`, other owner harnesses, or a restored draft
+after a bridge restart. Those remain blocked or not run, without a polling
+fallback.

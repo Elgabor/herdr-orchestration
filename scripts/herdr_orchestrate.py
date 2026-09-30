@@ -16,7 +16,8 @@ from herdr_runtime.transport import HerdrClient, HerdrError
 from herdr_runtime.provision import ProvisioningError, bootstrap_run, prepare_team
 from herdr_runtime.native_reset import ResetError, new_conversation
 from herdr_runtime.quota import check_choice, read_quota, validate_catalog
-from herdr_runtime.assignment import AssignmentError, dispatch, publish_result
+from herdr_runtime.assignment import AssignmentError, collect_event, dispatch, pending_events, publish_result
+from herdr_runtime.return_channel import PiReturnChannel
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -104,12 +105,24 @@ def parser() -> argparse.ArgumentParser:
     send.add_argument("--expected-generation", required=True, type=int)
     send.add_argument("--owner-epoch", required=True, type=int)
     send.add_argument("--state-dir", type=Path)
+    send.add_argument("--bridge-dir", type=Path)
+    send.add_argument("--bridge-nonce")
     publish = assignment_sub.add_parser("publish")
     publish.add_argument("--run-id", required=True)
     publish.add_argument("--assignment-id", required=True)
     publish.add_argument("--result-root", required=True, type=Path)
     publish.add_argument("--result-path", required=True)
     publish.add_argument("--state-dir", type=Path)
+    pending = assignment_sub.add_parser("pending")
+    pending.add_argument("--run-id", required=True)
+    pending.add_argument("--owner-epoch", required=True, type=int)
+    pending.add_argument("--state-dir", type=Path)
+    collect = assignment_sub.add_parser("collect")
+    collect.add_argument("--run-id", required=True)
+    collect.add_argument("--assignment-id", required=True)
+    collect.add_argument("--event-id", required=True)
+    collect.add_argument("--owner-epoch", required=True, type=int)
+    collect.add_argument("--state-dir", type=Path)
     return root
 
 
@@ -136,10 +149,23 @@ def main() -> int:
                             unknown=choice.get("unknown", []), cache=observed["cache"])
         client = HerdrClient()
         if args.command == "assignment" and args.assignment_command == "dispatch":
-            run = dispatch(client, StateStore(state_dir(args.state_dir)), read_config(args.config),
-                           args.expected_generation, args.owner_epoch)
-            return envelope("ok", "assignment dispatched with owner return armed",
-                            run_id=run["run_id"], generation=run["generation"])
+            if bool(args.bridge_dir) != bool(args.bridge_nonce):
+                raise ContractError("bridge-dir and bridge-nonce must be supplied together")
+            config = read_config(args.config)
+            channel = PiReturnChannel(client, args.bridge_dir, args.bridge_nonce) if args.bridge_dir else None
+            run = dispatch(client, StateStore(state_dir(args.state_dir)), config,
+                           args.expected_generation, args.owner_epoch, channel=channel)
+            assignment_id = config["assignment"]["assignment_id"]
+            assigned = run["assignments"][assignment_id]
+            event_id = next((key for key, item in run["outbox"].items()
+                             if item["event"]["assignment_id"] == assignment_id), None)
+            state = assigned["state"]
+            outcome = ("result_ready" if state == "result_received" else
+                       state if state in {"blocked", "protocol_error", "needs_reconcile"} else "ok")
+            return envelope(outcome, "worker wait returned; inspect the recorded event",
+                            run_id=run["run_id"], assignment_id=assignment_id,
+                            event_id=event_id, worker_status=assigned.get("result_status"),
+                            assignment_state=state, generation=run["generation"])
         if args.command == "assignment" and args.assignment_command == "publish":
             run, result = publish_result(client, StateStore(state_dir(args.state_dir)),
                                          args.run_id, args.assignment_id,
@@ -147,6 +173,19 @@ def main() -> int:
             return envelope("result_ready", "structured worker result recorded; owner collection pending",
                             run_id=run["run_id"], assignment_id=args.assignment_id,
                             worker_status=result["status"], generation=run["generation"])
+        if args.command == "assignment" and args.assignment_command == "pending":
+            events = pending_events(client, StateStore(state_dir(args.state_dir)),
+                                    args.run_id, args.owner_epoch)
+            return envelope("ok", "unreceived scoped events", run_id=args.run_id, events=events)
+        if args.command == "assignment" and args.assignment_command == "collect":
+            run, result, released = collect_event(client, StateStore(state_dir(args.state_dir)),
+                                                  args.run_id, args.assignment_id,
+                                                  args.event_id, args.owner_epoch)
+            return envelope("result_ready" if result else "blocked",
+                            "event received; project acceptance remains with owner",
+                            run_id=args.run_id, assignment_id=args.assignment_id,
+                            event_id=args.event_id, worker_status=result["status"] if result else None,
+                            worker_released=released, generation=run["generation"])
         if args.command == "doctor":
             status = client.status()
             local, server = status.get("client", {}), status.get("server", {})

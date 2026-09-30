@@ -23,7 +23,7 @@ class HerdrClient:
             raise HerdrError("resolved herdr path is not executable")
         self.binary = str(path)
 
-    def _execute(self, *args: str, timeout: int = 15) -> dict:
+    def _execute(self, *args: str, timeout: int | None = 15) -> dict:
         try:
             process = subprocess.run(
                 [self.binary, *args], capture_output=True, text=True,
@@ -98,3 +98,9 @@ class HerdrClient:
             return self._execute("agent", "prompt", pane_id, prompt)["result"]["agent"]
         except (KeyError, TypeError) as error:
             raise HerdrError("Herdr prompt response malformed; delivery state uncertain") from error
+
+    def agent_prompt_wait(self, pane_id: str, prompt: str) -> dict:
+        try:
+            return self._execute("agent", "prompt", pane_id, prompt, "--wait", timeout=None)["result"]["agent"]
+        except (KeyError, TypeError) as error:
+            raise HerdrError("Herdr waited prompt response malformed; delivery state uncertain") from error

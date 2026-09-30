@@ -6,8 +6,10 @@
   T04: DONE, commit `4e2aca9`. T05: DONE, commit `c45afe9`.
   T06: Pi adapter committed `def8820`; other harnesses remain uncertified.
   T07: conservative quota reader/catalog committed `d1dbaee`.
-  T08: dispatch/result core and tests complete, commit pending; production
-  dispatch awaits a certified T09 return channel and checkout snapshot gate.
+  T08: dispatch/result core and tests committed `f1e4013`; repository writes
+  await a certified checkout snapshot gate.
+  T09: Pi owner bridge, correlated outbox/ack, and live Pi→Pi return verified;
+  commit pending. Other owners and crash recovery remain uncertified.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -16,7 +18,7 @@
   `personal-skills` baseline cannot be fetched; no migration from it is assumed.
 - Decision: develop against installed versions and mark critical capabilities
   unverified until a dedicated Herdr session proves them. Do not update tools.
-- PASS: 23 offline tests; dedicated Herdr 0.9.2 client/server protocol 22;
+- PASS: dedicated Herdr 0.9.2 client/server protocol 22;
   Pi→Pi normal same-owner return, interrupted owner wait plus worker reattach,
   and worker `/new` in the same pane with configuration preserved.
 - PASS: live `team inspect` from `w2:p2` bound to `w2:t1`, and live test-run
@@ -28,7 +30,7 @@
   woke the same owner session. Unsent editor text survived a second return.
 - NOT RUN: Codex/Claude/OpenCode owner return; Claude lacks credits. Codex
   startup hit a trust prompt, which was declined. No integration was updated.
-- PASS: 49 offline tests for contracts, tab scope, provisioning, native Pi
+- PASS: 55 offline tests for contracts, tab scope, provisioning, native Pi
   reset and state.
   Live `run init` stored an explicit one-worker plan before split; the first
   `team prepare` recorded pane `w3:p2` but found its shell not yet ready.
@@ -49,4 +51,12 @@
   deduplicates publication. Production `assignment dispatch` remains
   `capability_blocked` without a same-owner return channel; no live task
   dispatch was claimed.
-- Next: commit T08, then T09 native Pi return channel and event recovery.
+- PASS: T09 live Pi owner extension dispatched one read-only assignment,
+  accepted a separate user turn while the worker gate was closed, then woke
+  the same owner session with one event. Owner collection set `received=true`
+  and `collected` without redispatch. The first wake prompt omitted exact CLI
+  syntax; corrected adapter text was not reloaded live.
+- NOT RUN: Codex, Claude Code, OpenCode owner bridges; Pi restart recovery,
+  event loss, and burst fault injection. No model polling fallback enabled.
+- Next: commit the verified Pi bridge increment, then T10 control and T12
+  recovery before the final skill rewrite and broad regression matrix.
