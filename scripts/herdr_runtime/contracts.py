@@ -242,6 +242,25 @@ def validate_result(value: object) -> dict:
             raise ContractError(f"open_points[{i}]: expected string")
     if not obj["verification"]:
         _required(obj, "verification_note", str)
+    handoff = obj.get("next_handoff")
+    if handoff is not None:
+        handoff = _object(handoff, "next_handoff")
+        if set(handoff) != {"route", "target_member_id", "instruction", "evidence"}:
+            raise ContractError("next_handoff: unsupported field")
+        _enum(handoff, "route", {"owner", "direct"}, "next_handoff")
+        _id(handoff, "target_member_id", "next_handoff")
+        _required(handoff, "instruction", str, "next_handoff")
+        if len(handoff["instruction"].encode()) > 4096:
+            raise ContractError("next_handoff.instruction: too large")
+        evidence = _required(handoff, "evidence", list, "next_handoff")
+        if len(evidence) > 16:
+            raise ContractError("next_handoff.evidence: too many references")
+        for index, item in enumerate(evidence):
+            item = _object(item, f"next_handoff.evidence[{index}]")
+            _relative_path(_required(item, "path", str), f"next_handoff.evidence[{index}].path")
+            digest = _required(item, "sha256", str)
+            if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ContractError(f"next_handoff.evidence[{index}].sha256: invalid")
     return obj
 
 
@@ -256,6 +275,12 @@ def validate_result_binding(result: dict, assignment: dict) -> None:
         expected = [item["amendment_id"] for item in amendments]
         if result.get("acknowledged_amendments") != expected:
             raise ContractError("acknowledged_amendments: worker has not confirmed current instructions")
+    handoff = result.get("next_handoff")
+    if handoff and handoff["route"] == "direct":
+        grant = assignment.get("route_grant")
+        if (not isinstance(grant, dict) or grant.get("route") != "direct"
+                or grant.get("target_member_id") != handoff["target_member_id"]):
+            raise ContractError("next_handoff: direct route lacks matching owner grant")
 
 
 def read_result_file(root: Path, relative_path: str) -> dict:

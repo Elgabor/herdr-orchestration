@@ -59,6 +59,14 @@ def validate_dispatch_config(config: dict) -> dict:
             raise ContractError("continuation_of: invalid")
     if assignment["repo"] is None and config["write_scope"]:
         raise ContractError("write_scope: research without repo cannot claim project writes")
+    if config.get("route_grant") is not None:
+        grant = config["route_grant"]
+        if (not isinstance(grant, dict) or set(grant) != {"grant_id", "route", "target_member_id", "max_hops"}
+                or not isinstance(grant.get("grant_id"), str) or not ID.fullmatch(grant["grant_id"])
+                or grant.get("route") != "direct" or type(grant.get("max_hops")) is not int
+                or grant["max_hops"] != 1 or not isinstance(grant.get("target_member_id"), str)
+                or not ID.fullmatch(grant["target_member_id"])):
+            raise ContractError("route_grant: expected exact one-hop target grant")
     if len(json.dumps(config, ensure_ascii=False).encode()) > 32 * 1024:
         raise ContractError("dispatch: exceeds 32 KiB")
     return config
@@ -74,6 +82,9 @@ def _packet(config: dict, state_root: Path) -> str:
         "entry_points": config["entry_points"], "write_scope": config["write_scope"],
         "result": {"root": config["result_root"], "path": config["result_path"],
                    "schema_version": SCHEMA_VERSION, "max_bytes": MAX_RESULT_BYTES},
+        "output_allowlist": [str(Path(config["result_root"]) / config["result_path"])],
+        "project_write_allowed": bool(config["write_scope"]),
+        "route_grant": config.get("route_grant"),
         "publish_command": ["python3", str(Path(__file__).resolve().parents[1] / "herdr_orchestrate.py"),
                             "assignment", "publish", "--run-id", assignment["run_id"],
                             "--assignment-id", assignment["assignment_id"],
@@ -114,6 +125,11 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
         raise AssignmentError("capability_blocked", "repository snapshot verification is not certified yet")
     if assignment["return_to"] != "owner":
         raise AssignmentError("capability_blocked", "direct relay is not authorized")
+    grant = config.get("route_grant")
+    if grant is not None and (grant["target_member_id"] == assignment["member_id"] or not any(
+        item["member_id"] == grant["target_member_id"] for item in run["members"]
+    )):
+        raise ContractError("route_grant: target absent from frozen roster or is source")
     active = [item for item in run["assignments"].values() if item["state"] in ACTIVE]
     if any(item["member_id"] == member["member_id"] for item in active):
         raise AssignmentError("busy", "member has an unresolved assignment")
@@ -141,6 +157,8 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     saved["write_scope"] = config["write_scope"]
     saved["entry_points"] = config["entry_points"]
     saved["future_instruction_ids"] = [item["instruction_id"] for item in future]
+    if grant is not None:
+        saved["route_grant"] = grant
     saved["return_handle"] = handle
     saved["state"] = "dispatching"
     run["assignments"][saved["assignment_id"]] = saved

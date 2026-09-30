@@ -11,8 +11,11 @@
   T09: Pi owner bridge, correlated outbox/ack, and live Pi→Pi return committed
   `c21c992`. Other owners and crash recovery remain uncertified.
   T10: versioned future instruction, dispatch pause and same-thread amendment
-  with queued/ack distinction implemented offline; commit pending. Targeted
+  with queued/ack distinction committed `eed1359`. Targeted
   cancel and native goal mutation remain capability-blocked.
+  T11: compact worker contract, read-only output allowlist, and bounded
+  `next_handoff` data/grant validation implemented offline; commit pending.
+  Automatic direct route is not certified and remains owner-mediated.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -66,5 +69,9 @@
   task. Future instruction is consumed once, pause does not cancel active work.
 - NOT RUN: T10 live amendment/cancel/goal; cancel and native goal control are
   blocked by absent certified adapters.
-- Next: commit T10 guarded controls, then T11 worker contract and T12
-  recovery before the final skill rewrite and broad regression matrix.
+- PASS: T11 offline result template and malicious handoff field rejection;
+  unplanned direct route cannot target a member outside the frozen roster.
+- NOT RUN: direct route live. A matching grant validates the result but does
+  not dispatch a second worker automatically.
+- Next: commit T11 worker contract, then T12 recovery before the final skill
+  rewrite and broad regression matrix.

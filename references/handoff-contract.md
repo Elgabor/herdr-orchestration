@@ -1,52 +1,48 @@
-# Compact handoff contract
+# Worker result and handoff contract
 
-Load this reference before constructing a worker prompt. A handoff is evidence
-for the owner, not a transcript and not an acceptance decision.
+The owner gives each worker one bounded JSON packet. The worker executes its
+assigned work in the **current native conversation and Herdr pane**. It does
+not inspect other panes, choose a model, create a team, or coordinate other
+members. The owner remains responsible for acceptance and any later routing.
 
-## Required fields
+The packet identifies `run_id`, `assignment_id`, `member_id`, `context_key`,
+`conversation_id`, `revision`, `attempt`, `return_to`, repository snapshot,
+instructions, acceptance, entry points, and write scope. `return_to` is always
+`owner`. `project_write_allowed=false` means no project edits; the listed
+`output_allowlist` still permits the required result JSON. The packet's
+`publish_command` is the exact local helper invocation after atomically
+writing that JSON. A worker should report `blocked`, `needs_info`, or `failed`
+honestly; an idle terminal is never proof of success.
 
-Ask the worker to write a short Markdown file with this shape:
+The result is at most 12 KiB and must match the packet identity, revision,
+attempt, conversation and repository fields. It contains status, concise
+summary, changed paths, verification outcomes, open points and artifact
+references. Never include credentials, environment values, full transcripts,
+or large logs. Evidence can live in separate approved output files and be
+referenced by safe relative path and SHA-256.
 
-```markdown
-status: done | blocked | needs_info
-task: <ticket or bounded task identifier>
-base_head: <commit inspected before work, if applicable>
-result: <one-paragraph factual summary>
-files_changed:
-  - <path or none>
-verification:
-  - command: <exact command>
-    result: PASS | FAIL | NOT RUN
-risks:
-  - <remaining risk or none>
-next_decision: <what the owner must decide>
+An optional `next_handoff` is **data for the owner**:
+
+```json
+{
+  "route": "owner",
+  "target_member_id": "reviewer",
+  "instruction": "Review the cited evidence",
+  "evidence": [{"path": "reports/findings.md", "sha256": "<64 lowercase hex>"}]
+}
 ```
 
-Keep the handoff under 12 KB. Put verbose logs, screenshots, generated reports,
-or full reviews in separate files and link their paths. Never paste secrets,
-environment values, credentials, or unrelated source into the handoff.
+The default route is owner review. `route=direct` requires an exact one-hop
+grant attached by the owner to this assignment, naming a member of the
+frozen roster. The helper validates the grant and result reference; it does
+not execute instructions embedded in a worker result. Automatic direct
+dispatch is not certified, so even a granted proposal returns to the owner
+for an explicit next assignment. A positive review returns to the owner as
+well. No review is copied into unrelated worker contexts.
 
-## Prompt tail
-
-The bundled helper appends the following intent to the supplied task:
-
-```text
-Before finishing, write the compact handoff to the exact supplied path. Include
-status, task, base_head, result, files_changed, verification, risks, and
-next_decision. Keep detailed evidence in separate files. Your final terminal
-message should contain only the handoff path.
-```
-
-## Owner validation
-
-The owner verifies:
-
-1. the handoff belongs to the dispatched task and expected base;
-2. listed files match the actual diff;
-3. verification commands and results are credible and reproducible;
-4. risks and unmet criteria are explicit;
-5. acceptance, repair, research, or blocking follows from repository evidence.
-
-If the handoff is absent or oversized, inspect the saved terminal excerpt once.
-Ask for a corrected handoff only if the worker actually finished and another
-prompt is within the repair budget.
+For a repair, the owner sends only the failed criterion and relevant
+evidence to the **same native thread**, with a new revision. A distinct
+assignment requires a clean native conversation in the same pane. A queued
+amendment is not considered received or effective until the worker's result
+matches the current revision and acknowledges its IDs; the owner checks the
+content before accepting it.

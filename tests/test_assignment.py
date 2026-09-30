@@ -222,6 +222,20 @@ class AssignmentTests(unittest.TestCase):
             self.send()
         self.assertEqual(self.channel.sends, [])
 
+    def test_read_only_packet_has_explicit_output_path_and_no_project_write(self):
+        self.send()
+        packet = self.channel.sends[0][1]
+        self.assertIn('"project_write_allowed":false', packet)
+        self.assertIn('"output_allowlist"', packet)
+        self.assertIn(str(self.root / "result.json"), packet)
+
+    def test_route_grant_cannot_target_unplanned_member(self):
+        self.config["route_grant"] = {"grant_id": "g1", "route": "direct",
+                                      "target_member_id": "surprise", "max_hops": 1}
+        with self.assertRaisesRegex(ValueError, "frozen roster"):
+            self.send()
+        self.assertEqual(self.channel.sends, [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "run_id": "example-run",
+  "assignment_id": "example-assignment",
+  "member_id": "worker-1",
+  "conversation_id": "example-native-thread",
+  "revision": 0,
+  "attempt": 1,
+  "status": "done",
+  "summary": "The bounded review is complete; the owner decides whether another member should act.",
+  "repo": null,
+  "base_head": null,
+  "work_snapshot": null,
+  "files_changed": [],
+  "verification": [],
+  "verification_note": "This example is a read-only review.",
+  "open_points": [],
+  "artifacts": [],
+  "next_handoff": {
+    "route": "owner",
+    "target_member_id": "reviewer",
+    "instruction": "Check the cited finding if the owner authorizes a review assignment.",
+    "evidence": [{"path": "reports/findings.md", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]
+  }
+}

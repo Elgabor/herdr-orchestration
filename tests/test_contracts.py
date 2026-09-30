@@ -27,6 +27,8 @@ class ContractTests(unittest.TestCase):
         validate_assignment(assignment)
         validate_result(result)
         validate_result_binding(result, assignment)
+        handoff = example("handoff")
+        validate_result_binding(handoff, assignment)
 
     def test_unknown_schema_and_field_errors(self):
         run = example("run")
@@ -57,6 +59,24 @@ class ContractTests(unittest.TestCase):
         result["summary"] = " "
         with self.assertRaisesRegex(ContractError, "summary"):
             validate_result(result)
+
+    def test_handoff_is_data_and_direct_route_requires_exact_grant(self):
+        assignment = example("assignment")
+        result = example("result")
+        result["next_handoff"] = {"route": "owner", "target_member_id": "reviewer",
+                                  "instruction": "Review the findings", "evidence": [
+                                      {"path": "evidence/report.md", "sha256": "a" * 64}]}
+        validate_result_binding(result, assignment)
+        result["next_handoff"]["route"] = "direct"
+        with self.assertRaisesRegex(ContractError, "owner grant"):
+            validate_result_binding(result, assignment)
+        assignment["route_grant"] = {"grant_id": "g1", "route": "direct",
+                                     "target_member_id": "reviewer", "max_hops": 1}
+        validate_result_binding(result, assignment)
+        result["next_handoff"]["command"] = "herdr agent start surprise"
+        with self.assertRaisesRegex(ContractError, "unsupported field"):
+            validate_result(result)
+        self.assertEqual(assignment["route_grant"]["target_member_id"], "reviewer")
 
     def test_scope_and_parallelism(self):
         run = example("run")
