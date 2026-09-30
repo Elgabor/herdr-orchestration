@@ -19,6 +19,7 @@ from herdr_runtime.quota import check_choice, read_quota, validate_catalog
 from herdr_runtime.assignment import AssignmentError, collect_event, dispatch, pending_events, publish_result
 from herdr_runtime.return_channel import PiReturnChannel
 from herdr_runtime.control import apply_control
+from herdr_runtime.recovery import confirm_resume, inspect_resume
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -131,6 +132,14 @@ def parser() -> argparse.ArgumentParser:
     apply.add_argument("--expected-generation", required=True, type=int)
     apply.add_argument("--owner-epoch", required=True, type=int)
     apply.add_argument("--state-dir", type=Path)
+    resume = sub.add_parser("resume", help="Inspect a bound run before owner confirmation")
+    resume_sub = resume.add_subparsers(dest="resume_command", required=True)
+    for operation in ("inspect", "confirm"):
+        command = resume_sub.add_parser(operation)
+        command.add_argument("--run-id", required=True)
+        command.add_argument("--expected-generation", required=True, type=int)
+        command.add_argument("--owner-epoch", required=True, type=int)
+        command.add_argument("--state-dir", type=Path)
     return root
 
 
@@ -156,6 +165,17 @@ def main() -> int:
             return envelope(outcome, choice["reason"], eligibility=choice["outcome"], profile_id=args.profile_id,
                             unknown=choice.get("unknown", []), cache=observed["cache"])
         client = HerdrClient()
+        if args.command == "resume":
+            store = StateStore(state_dir(args.state_dir))
+            if args.resume_command == "inspect":
+                observed = inspect_resume(client, store, args.run_id,
+                                          args.expected_generation, args.owner_epoch)
+                return envelope("ok", observed.pop("summary"), **observed)
+            run = confirm_resume(client, store, args.run_id,
+                                 args.expected_generation, args.owner_epoch)
+            return envelope("ok", "owner confirmed reconciliation; no worker prompt was sent",
+                            run_id=run["run_id"], generation=run["generation"],
+                            owner_epoch=run["owner_epoch"], awaiting_user_resume=False)
         if args.command == "control":
             config = read_config(args.config)
             run = apply_control(client, StateStore(state_dir(args.state_dir)), config,

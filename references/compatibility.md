@@ -36,6 +36,12 @@ Claude Code has no credits. [The Pi owner gate](return-capability.md) found
 working same-thread completion and reset, but failed pre-completion user input
 with the blocking wait. The other owner adapters remain unverified.
 
+The later [Pi bridge test](return-capability.md#production-pi-bridge-exercise-2026-09-30)
+passed same-session wake, pre-completion user input and correlated result
+collection. [Recovery](recovery.md) currently handles only the same bound
+owner and completed/outbox state; it does not claim support for an owner
+process restart, an active worker with a lost listener, or a reused pane ID.
+
 ## Migration inventory
 
 Source checkout: `Elgabor/herdr-orchestration` at

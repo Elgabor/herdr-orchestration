@@ -139,6 +139,8 @@ def validate_run(value: object) -> dict:
     for key in ("parallel_authorized", "bootstrap_authorized", "team_frozen", "pause_dispatch"):
         if type(obj.get(key)) is not bool:
             raise ContractError(f"{key}: expected bool")
+    if "awaiting_user_resume" in obj and type(obj["awaiting_user_resume"]) is not bool:
+        raise ContractError("awaiting_user_resume: expected bool")
     members = _required(obj, "members", list)
     ids = {owner["member_id"]}
     panes = {owner["pane_id"]}

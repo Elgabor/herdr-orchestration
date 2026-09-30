@@ -14,8 +14,11 @@
   with queued/ack distinction committed `eed1359`. Targeted
   cancel and native goal mutation remain capability-blocked.
   T11: compact worker contract, read-only output allowlist, and bounded
-  `next_handoff` data/grant validation implemented offline; commit pending.
+  `next_handoff` data/grant validation committed `595d1de`.
   Automatic direct route is not certified and remains owner-mediated.
+  T12: same-owner resume inspect/confirm and dispatch gate implemented;
+  commit pending. Lost-listener reattach, owner transfer, and cleanup remain
+  capability-blocked.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -73,5 +76,10 @@
   unplanned direct route cannot target a member outside the frozen roster.
 - NOT RUN: direct route live. A matching grant validates the result but does
   not dispatch a second worker automatically.
-- Next: commit T11 worker contract, then T12 recovery before the final skill
-  rewrite and broad regression matrix.
+- PASS: 65 offline tests. Live Pi same-owner `resume inspect` found one bound
+  worker and no pending event, then explicit `resume confirm` advanced the
+  generation without worker prompt.
+- NOT RUN: lost owner/worker/server recovery live, listener reattach and owned
+  resource cleanup.
+- Next: commit T12 bounded recovery, then T13 skill rewrite and T14 regression
+  coverage. Remaining capability gaps must stay explicit in final delivery.

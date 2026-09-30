@@ -108,6 +108,8 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     verify_binding(run["owner"], private["owner"], private["panes"].get(run["scope"]["owner_pane_id"]), run["scope"])
     if run["pause_dispatch"]:
         raise AssignmentError("busy", "dispatch paused by owner")
+    if run.get("awaiting_user_resume", False):
+        raise AssignmentError("busy", "resume needs owner confirmation before new dispatch")
     if assignment["assignment_id"] in run["assignments"]:
         raise AssignmentError("busy", "assignment already exists; reconcile instead of resending")
     member = next((item for item in run["members"] if item["member_id"] == assignment["member_id"]), None)

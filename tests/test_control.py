@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from herdr_runtime.assignment import AssignmentError, dispatch, publish_result  # noqa: E402
 from herdr_runtime.context import adopt_existing, inspect_team  # noqa: E402
 from herdr_runtime.control import apply_control  # noqa: E402
+from herdr_runtime.recovery import confirm_resume, inspect_resume  # noqa: E402
 from herdr_runtime.state import StateStore  # noqa: E402
 
 
@@ -137,6 +138,49 @@ class ControlTests(unittest.TestCase):
             with self.assertRaisesRegex(AssignmentError, "not certified"):
                 self.control(operation)
         self.assertEqual(self.store.load_run("example-run"), before)
+        self.assertEqual(self.client.prompts, [])
+
+    def test_resume_requires_explicit_confirmation_and_does_not_prompt(self):
+        observed = inspect_resume(self.client, self.store, "example-run", 1, 1)
+        self.assertTrue(observed["awaiting_user_resume"])
+        self.assertLessEqual(len(observed["summary"].split()), 80)
+        with self.assertRaisesRegex(AssignmentError, "owner confirmation"):
+            self.dispatch()
+        run = confirm_resume(self.client, self.store, "example-run", observed["generation"], 1)
+        self.assertFalse(run["awaiting_user_resume"])
+        self.assertEqual(self.channel.sends, [])
+        self.assertEqual(self.client.prompts, [])
+
+    def test_resume_collects_result_before_confirming(self):
+        self.dispatch()
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+        result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+        result["conversation_id"] = "/test/worker.jsonl"
+        (self.root / "result.json").write_text(json.dumps(result))
+        publish_result(self.client, self.store, "example-run", "example-assignment", self.root, "result.json")
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+        generation = self.store.load_run("example-run")["generation"]
+        observed = inspect_resume(self.client, self.store, "example-run", generation, 1)
+        self.assertEqual(len(observed["pending_events"]), 1)
+        with self.assertRaisesRegex(AssignmentError, "collect pending"):
+            confirm_resume(self.client, self.store, "example-run", observed["generation"], 1)
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_resume_active_worker_never_redispatches(self):
+        self.dispatch()
+        generation = self.store.load_run("example-run")["generation"]
+        observed = inspect_resume(self.client, self.store, "example-run", generation, 1)
+        self.assertEqual(observed["reattach"], "not_certified")
+        with self.assertRaisesRegex(AssignmentError, "listener reattach"):
+            confirm_resume(self.client, self.store, "example-run", observed["generation"], 1)
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_resume_changed_worker_reports_missing_and_refuses_confirm(self):
+        self.client.data["snapshot"]["agents"][1]["terminal_id"] = "reused-terminal"
+        observed = inspect_resume(self.client, self.store, "example-run", 1, 1)
+        self.assertEqual(observed["members"][0]["condition"], "missing_or_changed")
+        with self.assertRaisesRegex(AssignmentError, "member binding changed"):
+            confirm_resume(self.client, self.store, "example-run", observed["generation"], 1)
         self.assertEqual(self.client.prompts, [])
 
 
