@@ -16,7 +16,8 @@ from herdr_runtime.transport import HerdrClient, HerdrError
 from herdr_runtime.provision import ProvisioningError, bootstrap_run, prepare_team
 from herdr_runtime.native_reset import ResetError, new_conversation
 from herdr_runtime.quota import check_choice, read_quota, validate_catalog
-from herdr_runtime.assignment import AssignmentError, collect_event, dispatch, pending_events, publish_result
+from herdr_runtime.assignment import (AssignmentError, collect_event, dispatch,
+                                      pending_events, publish_result, reattach_wait)
 from herdr_runtime.return_channel import PiReturnChannel
 from herdr_runtime.control import apply_control
 from herdr_runtime.recovery import confirm_resume, inspect_resume
@@ -114,6 +115,14 @@ def parser() -> argparse.ArgumentParser:
     send.add_argument("--state-dir", type=Path)
     send.add_argument("--bridge-dir", type=Path)
     send.add_argument("--bridge-nonce")
+    reattach = assignment_sub.add_parser("reattach")
+    reattach.add_argument("--run-id", required=True)
+    reattach.add_argument("--assignment-id", required=True)
+    reattach.add_argument("--expected-generation", required=True, type=int)
+    reattach.add_argument("--owner-epoch", required=True, type=int)
+    reattach.add_argument("--state-dir", type=Path)
+    reattach.add_argument("--bridge-dir", required=True, type=Path)
+    reattach.add_argument("--bridge-nonce", required=True)
     publish = assignment_sub.add_parser("publish")
     publish.add_argument("--run-id", required=True)
     publish.add_argument("--assignment-id", required=True)
@@ -212,6 +221,21 @@ def main() -> int:
                             run_id=run["run_id"], assignment_id=assignment_id,
                             event_id=event_id, worker_status=assigned.get("result_status"),
                             assignment_state=state, generation=run["generation"])
+        if args.command == "assignment" and args.assignment_command == "reattach":
+            channel = PiReturnChannel(client, args.bridge_dir, args.bridge_nonce)
+            run = reattach_wait(client, StateStore(state_dir(args.state_dir)), args.run_id,
+                                args.assignment_id, args.expected_generation, args.owner_epoch, channel)
+            assigned = run["assignments"][args.assignment_id]
+            event_id = next((key for key, item in run["outbox"].items()
+                             if item["event"]["assignment_id"] == args.assignment_id
+                             and not item["received"]), None)
+            state = assigned["state"]
+            outcome = ("result_ready" if state == "result_received" else
+                       state if state in {"blocked", "protocol_error", "needs_reconcile"} else "ok")
+            return envelope(outcome, "existing worker observed; no task prompt was sent",
+                            run_id=args.run_id, assignment_id=args.assignment_id,
+                            event_id=event_id, assignment_state=state,
+                            generation=run["generation"])
         if args.command == "assignment" and args.assignment_command == "publish":
             run, result = publish_result(client, StateStore(state_dir(args.state_dir)),
                                          args.run_id, args.assignment_id,

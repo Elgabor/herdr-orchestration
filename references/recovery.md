@@ -15,11 +15,19 @@ generation mismatch and requires another inspect. A pause remains in effect.
 
 An owner process or native session that has changed cannot silently claim the
 old run. A worker that is still active after a lost listener cannot be
-redispatched or considered finished. Pi listener reattachment without a new
-prompt, owner transfer with process fencing, `events_lost` reconciliation,
-and support-process cleanup are not certified yet; these states return a
-blocking diagnosis. The helper never kills the Herdr server or removes an
-adopted pane. A stale pane ID after a server restart is not an identity match.
+redispatched or considered finished. For the **same live Pi owner process and
+native session**, `/herdrreattach RUN_ID ASSIGNMENT_ID STATE_DIR GENERATION
+EPOCH` arms a replacement listener and calls Herdr `agent wait` on the
+existing worker without sending a prompt. `STATE_DIR` must be URL encoded
+as with `/herdrdispatch`. The old listener PID must be absent and the owner,
+member, pane, scope, and epoch bindings must still match. The replacement
+handle is saved before waiting. A result arriving during the wait remains in
+the outbox; a missing result produces a protocol error. This path has offline
+fault tests and still needs a live production exercise. Owner transfer,
+`events_lost` reconciliation, and support-process cleanup are not certified;
+these states return a blocking diagnosis. The helper never kills the Herdr
+server or removes an adopted pane. A stale pane ID after a server restart is
+not an identity match.
 
 In the dedicated Pi→Pi test on 2026-09-30, the already collected assignment
 was recovered in generation 6, with one bound worker and no pending event.

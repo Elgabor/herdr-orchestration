@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from herdr_runtime.assignment import (AssignmentError, collect_event, dispatch,
-                                      pending_events, publish_result,
+                                      pending_events, publish_result, reattach_wait,
                                       validate_dispatch_config)  # noqa: E402
 from herdr_runtime.context import adopt_existing, inspect_team  # noqa: E402
 from herdr_runtime.state import StateStore  # noqa: E402
@@ -57,6 +57,28 @@ class Channel:
             self.on_send()
         if self.fail:
             raise RuntimeError("transport response lost")
+        return self.completion
+
+
+class ReattachChannel:
+    def __init__(self):
+        self.waits = []
+        self.completion = {"agent_status": "done"}
+        self.on_wait = None
+        self.owner_pid = os.getpid()
+
+    def supports(self, owner, member):
+        return owner["harness"] == member["harness"] == "pi"
+
+    def arm(self, run, assignment, member):
+        return {"kind": "pi_extension", "owner_process_pid": self.owner_pid,
+                "owner_session_file": run["owner"]["conversation_id"],
+                "listener_pid": os.getpid(), "listener_version": 1}
+
+    def wait_existing(self, pane, handle):
+        self.waits.append((pane, handle))
+        if self.on_wait:
+            self.on_wait()
         return self.completion
 
 
@@ -358,6 +380,79 @@ class AssignmentTests(unittest.TestCase):
         with self.assertRaisesRegex(AssignmentError, "differ from Git"):
             publish_result(self.client, self.store, "example-run", "example-assignment",
                            repo, "result.json")
+
+    def _active_with_lost_listener(self):
+        run = self.send()
+        prior = run["generation"]
+        run["assignments"]["example-assignment"]["return_handle"] = {
+            "kind": "pi_extension", "owner_process_pid": os.getpid(),
+            "owner_session_file": run["owner"]["conversation_id"],
+            "listener_pid": 987654321, "listener_version": 1}
+        run["generation"] += 1
+        self.store.update_run(run, expected_generation=prior, owner_epoch=1)
+        self.client.data["snapshot"]["agents"][1]["agent_status"] = "working"
+        return ReattachChannel()
+
+    def test_reattach_waits_existing_worker_and_preserves_result_race(self):
+        channel = self._active_with_lost_listener()
+
+        def publish_during_wait():
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+            result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+            result["conversation_id"] = "/test/worker.jsonl"
+            (self.root / "result.json").write_text(json.dumps(result))
+            publish_result(self.client, self.store, "example-run", "example-assignment",
+                           self.root, "result.json")
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+
+        channel.on_wait = publish_during_wait
+        with patch("herdr_runtime.assignment.os.kill", side_effect=ProcessLookupError):
+            generation = self.store.load_run("example-run")["generation"]
+            run = reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                                generation, 1, channel)
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "result_received")
+        self.assertEqual(run["assignments"]["example-assignment"]["return_handle"]["listener_version"], 2)
+        self.assertEqual(len(self.channel.sends), 1)
+        self.assertEqual(len(channel.waits), 1)
+        self.assertEqual(len(run["outbox"]), 1)
+
+    def test_reattach_refuses_live_listener_or_changed_owner_process(self):
+        channel = self._active_with_lost_listener()
+        generation = self.store.load_run("example-run")["generation"]
+        with patch("herdr_runtime.assignment.os.kill", return_value=None):
+            with self.assertRaisesRegex(AssignmentError, "still running"):
+                reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                              generation, 1, channel)
+        channel.owner_pid += 1
+        with self.assertRaisesRegex(AssignmentError, "owner process or session changed"):
+            reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                          generation, 1, channel)
+        self.assertEqual(self.store.load_run("example-run")["generation"], generation)
+        self.assertEqual(len(channel.waits), 0)
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_reattach_missing_result_reports_protocol_error_once(self):
+        channel = self._active_with_lost_listener()
+        with patch("herdr_runtime.assignment.os.kill", side_effect=ProcessLookupError):
+            generation = self.store.load_run("example-run")["generation"]
+            run = reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                                generation, 1, channel)
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "protocol_error")
+        self.assertEqual(len(run["outbox"]), 1)
+        self.assertEqual(len(channel.waits), 1)
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_reattach_rejects_epoch_change_during_wait(self):
+        channel = self._active_with_lost_listener()
+        channel.on_wait = lambda: self.store.resume_owner("example-run", expected_epoch=1)
+        with patch("herdr_runtime.assignment.os.kill", side_effect=ProcessLookupError):
+            generation = self.store.load_run("example-run")["generation"]
+            with self.assertRaisesRegex(AssignmentError, "listener changed during wait"):
+                reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                              generation, 1, channel)
+        self.assertEqual(self.store.load_run("example-run")["owner_epoch"], 2)
+        self.assertEqual(len(channel.waits), 1)
+        self.assertEqual(len(self.channel.sends), 1)
 
     def test_dirty_repo_blocks_before_prompt(self):
         from test_snapshot import make_repo

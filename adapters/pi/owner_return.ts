@@ -38,23 +38,29 @@ export default function (pi: any) {
   });
   pi.on("session_before_switch", () => { activeSessionFile = null; });
 
-  pi.registerCommand("herdrdispatch", {
-    description: "Dispatch one scoped Herdr assignment and return to this Pi session",
+  const register = (name: string, reattach: boolean) => pi.registerCommand(name, {
+    description: reattach
+      ? "Reattach this Pi owner to an existing Herdr assignment without sending a prompt"
+      : "Dispatch one scoped Herdr assignment and return to this Pi session",
     handler: async (args: string, ctx: any) => {
       if (process.env.HERDR_ENV !== "1" || !ctx.isIdle()) {
         ctx.ui.notify("Herdr owner is not idle in a Herdr pane", "error");
         return;
       }
       const parts = args.trim().split(/\s+/);
-      if (parts.length !== 6) {
-        ctx.ui.notify("Expected run_id assignment_id config_path state_dir generation epoch", "error");
+      if (parts.length !== (reattach ? 5 : 6)) {
+        ctx.ui.notify(reattach
+          ? "Expected run_id assignment_id state_dir generation epoch"
+          : "Expected run_id assignment_id config_path state_dir generation epoch", "error");
         return;
       }
-      const [runId, assignmentId, encodedConfig, encodedState, generation, epoch] = parts;
-      let configPath: string;
+      const [runId, assignmentId] = parts;
+      const [encodedConfig, encodedState, generation, epoch] = reattach
+        ? [null, parts[2], parts[3], parts[4]] : parts.slice(2);
+      let configPath: string | null = null;
       let stateDir: string;
       try {
-        configPath = decodeURIComponent(encodedConfig);
+        if (encodedConfig !== null) configPath = decodeURIComponent(encodedConfig);
         stateDir = decodeURIComponent(encodedState);
       } catch {
         ctx.ui.notify("Invalid encoded path", "error");
@@ -63,9 +69,9 @@ export default function (pi: any) {
       const bridgeDir = process.env.HERDR_ORCH_BRIDGE_DIR;
       const ownerSessionFile = ctx.sessionManager.getSessionFile();
       if (!idPattern.test(runId) || !idPattern.test(assignmentId) ||
-          !isAbsolute(configPath) || !isAbsolute(stateDir) || !bridgeDir ||
+          (configPath !== null && !isAbsolute(configPath)) || !isAbsolute(stateDir) || !bridgeDir ||
           !ownerSessionFile || !/^\d+$/.test(generation) || !/^\d+$/.test(epoch)) {
-        ctx.ui.notify("Herdr dispatch binding incomplete", "error");
+        ctx.ui.notify("Herdr owner binding incomplete", "error");
         return;
       }
       const identity = `${runId}/${assignmentId}`;
@@ -88,8 +94,9 @@ export default function (pi: any) {
       }
       inFlight.add(identity);
       activeSessionFile = ownerSessionFile;
-      const child = spawn("python3", [helper, "assignment", "dispatch",
-        "--config", configPath, "--expected-generation", generation,
+      const child = spawn("python3", [helper, "assignment", reattach ? "reattach" : "dispatch",
+        ...(configPath === null ? ["--run-id", runId, "--assignment-id", assignmentId]
+          : ["--config", configPath]), "--expected-generation", generation,
         "--owner-epoch", epoch, "--state-dir", stateDir,
         "--bridge-dir", bridgeDir, "--bridge-nonce", nonce],
       { stdio: ["ignore", "pipe", "pipe"] });
@@ -126,7 +133,11 @@ export default function (pi: any) {
         } catch { /* A malformed CLI envelope is an error, never success. */ }
         deliver(outcome, eventId);
       });
-      ctx.ui.notify(`Assignment ${assignmentId} dispatched; owner input remains available`, "info");
+      ctx.ui.notify(reattach
+        ? `Assignment ${assignmentId} reattached; owner input remains available`
+        : `Assignment ${assignmentId} dispatched; owner input remains available`, "info");
     },
   });
+  register("herdrdispatch", false);
+  register("herdrreattach", true);
 }

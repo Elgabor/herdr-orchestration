@@ -13,7 +13,7 @@ from .contracts import (ContractError, ID, MAX_RESULT_BYTES, SCHEMA_VERSION,
                         event_id, read_result_file, validate_assignment,
                         validate_result_binding)
 from .state import StateStore
-from .transport import HerdrClient
+from .transport import HerdrClient, HerdrError
 from .snapshot import SnapshotError, changed_paths, clean_snapshot
 
 
@@ -221,6 +221,93 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
                  "attempt": saved["attempt"], "type": current["state"], "result_digest": digest}
         key = event_id(event)
         latest["outbox"][key] = {"event": event, "received": False, "action_intent": None, "applied": False}
+    else:
+        current["state"] = "needs_reconcile"
+    return _save(latest, store, owner_epoch)
+
+
+def reattach_wait(client: HerdrClient, store: StateStore, run_id: str, assignment_id: str,
+                  expected_generation: int, owner_epoch: int, channel) -> dict:
+    """Arm a replacement Pi listener for an existing assignment; never prompt it."""
+    if os.environ.get("HERDR_ENV") != "1":
+        raise AssignmentError("capability_blocked", "reattach requires the recorded Herdr owner pane")
+    _, private = inspect_team(client)
+    run = store.load_run(run_id)
+    if run["generation"] != expected_generation or run["owner_epoch"] != owner_epoch:
+        raise AssignmentError("needs_reconcile", "run generation or owner epoch changed")
+    if run["scope"] != private["scope"]:
+        raise AssignmentError("scope_mismatch", "owner scope changed")
+    verify_binding(run["owner"], private["owner"], private["panes"].get(run["scope"]["owner_pane_id"]), run["scope"])
+    assignment = run["assignments"].get(assignment_id)
+    if not assignment:
+        raise AssignmentError("protocol_error", "assignment absent")
+    if assignment["state"] == "result_received":
+        return run
+    if assignment["state"] not in {"dispatching", "active", "delivery_uncertain", "needs_reconcile"}:
+        raise AssignmentError("needs_reconcile", "assignment is not waiting for a result")
+    member = next((item for item in run["members"] if item["member_id"] == assignment["member_id"]), None)
+    live = next((item for item in private["agents"] if member and item["pane_id"] == member["pane_id"]), None)
+    if not member:
+        raise AssignmentError("identity_changed", "assigned member missing from frozen roster")
+    verify_binding(member, live, private["panes"].get(member["pane_id"]), run["scope"])
+    if live.get("agent_status") not in {"working", "blocked", "idle", "done"}:
+        raise AssignmentError("needs_reconcile", "worker lifecycle is unknown")
+    previous = assignment.get("return_handle")
+    if not isinstance(previous, dict) or previous.get("kind") != "pi_extension":
+        raise AssignmentError("capability_blocked", "original listener identity is not certified")
+    if channel is None or not channel.supports(run["owner"], member):
+        raise AssignmentError("capability_blocked", "replacement owner return channel is not armed")
+    try:
+        handle = channel.arm(run, assignment, member)
+    except (ValueError, OSError) as error:
+        raise AssignmentError("capability_blocked", "replacement owner arm proof invalid") from error
+    if (not isinstance(handle, dict) or handle.get("kind") != "pi_extension"
+            or handle.get("owner_process_pid") != previous.get("owner_process_pid")
+            or handle.get("owner_session_file") != previous.get("owner_session_file")):
+        raise AssignmentError("capability_blocked", "owner process or session changed; transfer not certified")
+    old_pid = previous.get("listener_pid")
+    if not isinstance(old_pid, int) or old_pid <= 0 or old_pid == os.getpid():
+        raise AssignmentError("capability_blocked", "original listener identity invalid or still active")
+    try:
+        os.kill(old_pid, 0)
+    except ProcessLookupError:
+        pass
+    except OSError as error:
+        raise AssignmentError("capability_blocked", "original listener liveness uncertain") from error
+    else:
+        raise AssignmentError("busy", "original listener is still running")
+    handle["listener_version"] = previous.get("listener_version", 1) + 1
+    assignment["return_handle"] = handle
+    _save(run, store, owner_epoch)
+    try:
+        completion = channel.wait_existing(member["pane_id"], handle)
+    except HerdrError as error:
+        latest = store.load_run(run_id)
+        current = latest["assignments"][assignment_id]
+        if current.get("return_handle") != handle or latest["owner_epoch"] != owner_epoch:
+            raise AssignmentError("needs_reconcile", "listener changed during wait") from error
+        if current["state"] == "result_received":
+            return latest
+        current["state"] = "needs_reconcile"
+        _save(latest, store, owner_epoch)
+        raise AssignmentError("needs_reconcile", "existing-worker wait failed; task was not resent") from error
+    latest = store.load_run(run_id)
+    current = latest["assignments"][assignment_id]
+    if current.get("return_handle") != handle or latest["owner_epoch"] != owner_epoch:
+        raise AssignmentError("needs_reconcile", "listener changed during wait")
+    if current["state"] == "result_received":
+        return latest
+    lifecycle = completion.get("agent_status") if isinstance(completion, dict) else None
+    current["worker_lifecycle"] = lifecycle or "unknown"
+    if lifecycle in {"idle", "done", "blocked"}:
+        current["state"] = "blocked" if lifecycle == "blocked" else "protocol_error"
+        digest = hashlib.sha256(f"missing-result:{assignment_id}:{current['revision']}".encode()).hexdigest()
+        event = {"schema_version": SCHEMA_VERSION, "run_id": run_id,
+                 "assignment_id": assignment_id, "revision": current["revision"],
+                 "attempt": current["attempt"], "type": current["state"], "result_digest": digest}
+        key = event_id(event)
+        latest["outbox"].setdefault(key, {"event": event, "received": False,
+                                          "action_intent": None, "applied": False})
     else:
         current["state"] = "needs_reconcile"
     return _save(latest, store, owner_epoch)

@@ -104,3 +104,10 @@ class HerdrClient:
             return self._execute("agent", "prompt", pane_id, prompt, "--wait", timeout=None)["result"]["agent"]
         except (KeyError, TypeError) as error:
             raise HerdrError("Herdr waited prompt response malformed; delivery state uncertain") from error
+
+    def agent_wait(self, pane_id: str) -> dict:
+        """Wait for an existing agent without sending another task."""
+        try:
+            return self._execute("agent", "wait", pane_id, timeout=None)["result"]["agent"]
+        except (KeyError, TypeError) as error:
+            raise HerdrError("Herdr existing-agent wait response malformed") from error

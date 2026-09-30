@@ -62,3 +62,6 @@ class PiReturnChannel:
 
     def send(self, pane_id: str, packet: str, handle: dict) -> dict:
         return self.client.agent_prompt_wait(pane_id, packet)
+
+    def wait_existing(self, pane_id: str, handle: dict) -> dict:
+        return self.client.agent_wait(pane_id)
