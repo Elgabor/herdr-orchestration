@@ -14,7 +14,7 @@ from .contracts import (ContractError, ID, MAX_RESULT_BYTES, SCHEMA_VERSION,
                         validate_result_binding)
 from .state import StateStore
 from .transport import HerdrClient
-from .snapshot import SnapshotError, clean_snapshot
+from .snapshot import SnapshotError, changed_paths, clean_snapshot
 
 
 class AssignmentError(RuntimeError):
@@ -258,6 +258,25 @@ def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignme
         validate_result_binding(result, assignment)
     except ContractError as error:
         raise AssignmentError("protocol_error", str(error)) from error
+    if assignment["repo"] is not None:
+        try:
+            changed = changed_paths(Path(assignment["repo"]), assignment["base_head"])
+        except SnapshotError as error:
+            raise AssignmentError("needs_reconcile", str(error)) from error
+        # Only the registered result file is an output outside write_scope.
+        # Worker-declared artifacts cannot exempt arbitrary project changes.
+        try:
+            output = (Path(result_root) / result_path).resolve().relative_to(Path(assignment["repo"]))
+            changed.discard(output.as_posix())
+        except ValueError:
+            pass
+        reported = set(result["files_changed"])
+        if changed != reported or len(result["files_changed"]) != len(reported):
+            raise AssignmentError("protocol_error", "reported files differ from Git changes since assigned base")
+        allowed = assignment.get("write_scope", [])
+        if any(not any(path == scope or path.startswith(scope.rstrip("/") + "/") for scope in allowed)
+               for path in changed):
+            raise AssignmentError("scope_mismatch", "Git change lies outside assigned write_scope")
     digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if assignment["state"] == "result_received":
         if assignment.get("result_digest") == digest:

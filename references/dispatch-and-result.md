@@ -21,6 +21,14 @@ and a repository writer must have a safe relative `write_scope`. An external
 mutation between the final check and the worker's first action is still a
 checkout race, so the owner must review the final diff before acceptance.
 
+For repository assignments, publication compares `files_changed` with Git's
+tracked and non-ignored untracked path names since the assigned HEAD. It
+rejects omissions, invented or duplicate names, and paths outside
+`write_scope`. Only the registered result JSON is excluded if it lives in
+the checkout; worker-declared artifacts cannot widen the scope. This checks
+paths, not file content, ignored files, concurrent writes after inspection,
+or the quality of the change. Owner diff review is still required.
+
 `assignment publish` is available to the assigned worker pane after a
 dispatch exists. It reads at most 12 KiB from a safe relative path beneath
 the registered output root, rejects symlinks and validates run, assignment,

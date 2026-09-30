@@ -7,7 +7,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from herdr_runtime.snapshot import SnapshotError, clean_snapshot  # noqa: E402
+from herdr_runtime.snapshot import SnapshotError, changed_paths, clean_snapshot  # noqa: E402
 
 
 def make_repo(root: Path) -> Path:
@@ -49,6 +49,20 @@ class SnapshotTests(unittest.TestCase):
             link.symlink_to(repo, target_is_directory=True)
             with self.assertRaisesRegex(SnapshotError, "non-symlink"):
                 clean_snapshot(link)
+
+    def test_changed_paths_preserves_names_and_includes_untracked_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = make_repo(Path(directory))
+            observed = clean_snapshot(repo)
+            base = observed["base_head"]
+            (repo / "README.md").write_text("changed\n")
+            (repo / " nested.txt").write_text("new\n")
+            (repo / "sub").mkdir()
+            (repo / "sub" / "note.txt").write_text("new\n")
+            self.assertEqual(changed_paths(Path(observed["repo"]), base),
+                             {"README.md", " nested.txt", "sub/note.txt"})
+            with self.assertRaisesRegex(SnapshotError, "assigned base_head invalid"):
+                changed_paths(Path(observed["repo"]), "not-a-commit")
 
 
 if __name__ == "__main__":

@@ -304,6 +304,61 @@ class AssignmentTests(unittest.TestCase):
         self.assertEqual(run["assignments"]["example-assignment"]["state"], "active")
         self.assertEqual(len(self.channel.sends), 1)
 
+    def _repo_result(self, result_root=None):
+        from test_snapshot import make_repo
+        from herdr_runtime.snapshot import clean_snapshot
+        repo = make_repo(self.root)
+        observed = clean_snapshot(repo)
+        self.config["assignment"].update(repo=observed["repo"],
+                                          base_head=observed["base_head"],
+                                          work_snapshot=observed["work_snapshot"])
+        self.config["write_scope"] = ["README.md"]
+        if result_root is not None:
+            self.config["result_root"] = str(result_root)
+        self.send()
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+        result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+        result.update(conversation_id="/test/worker.jsonl", repo=observed["repo"],
+                      base_head=observed["base_head"], work_snapshot=observed["work_snapshot"])
+        return repo, result
+
+    def test_repo_result_matches_actual_git_changes(self):
+        repo, result = self._repo_result()
+        (repo / "README.md").write_text("changed\n")
+        result["files_changed"] = ["README.md"]
+        (self.root / "result.json").write_text(json.dumps(result))
+        run, _ = publish_result(self.client, self.store, "example-run", "example-assignment",
+                                self.root, "result.json")
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "result_received")
+
+    def test_repo_result_cannot_omit_or_invent_changes(self):
+        repo, result = self._repo_result()
+        (repo / "README.md").write_text("changed\n")
+        for reported in ([], ["README.md", "invented.txt"], ["README.md", "README.md"]):
+            result["files_changed"] = reported
+            (self.root / "result.json").write_text(json.dumps(result))
+            with self.subTest(reported=reported), self.assertRaisesRegex(AssignmentError, "differ from Git"):
+                publish_result(self.client, self.store, "example-run", "example-assignment",
+                               self.root, "result.json")
+
+    def test_repo_result_rejects_out_of_scope_change_even_if_reported(self):
+        repo, result = self._repo_result()
+        (repo / "other.txt").write_text("outside scope\n")
+        result["files_changed"] = ["other.txt"]
+        (self.root / "result.json").write_text(json.dumps(result))
+        with self.assertRaisesRegex(AssignmentError, "outside assigned write_scope"):
+            publish_result(self.client, self.store, "example-run", "example-assignment",
+                           self.root, "result.json")
+
+    def test_worker_artifact_cannot_exempt_project_change(self):
+        repo, result = self._repo_result(result_root=self.root / "project")
+        (repo / "other.txt").write_text("outside scope\n")
+        result["artifacts"] = [{"path": "other.txt", "type": "text", "sha256": None}]
+        (repo / "result.json").write_text(json.dumps(result))
+        with self.assertRaisesRegex(AssignmentError, "differ from Git"):
+            publish_result(self.client, self.store, "example-run", "example-assignment",
+                           repo, "result.json")
+
     def test_dirty_repo_blocks_before_prompt(self):
         from test_snapshot import make_repo
         from herdr_runtime.snapshot import clean_snapshot

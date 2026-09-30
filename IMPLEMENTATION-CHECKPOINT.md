@@ -105,6 +105,10 @@
   dirty tracked/untracked work blocked. Live Pi→Pi synthetic repository write
   modified only `README.md`, returned a correlated result and was collected
   by the same owner. Four test agents have exited; scoped snapshot shows zero.
+- PASS: 84 offline tests after Git publication checks. The worker's reported
+  paths must match tracked and non-ignored untracked Git changes and stay
+  within `write_scope`; a declared artifact cannot exempt a project file.
+  No new live publication was run after this check.
 - Next: final audit. Complete critical missing adapters
   only when their prerequisites and live tests are available.
   Remaining capability gaps must stay explicit in final delivery.
