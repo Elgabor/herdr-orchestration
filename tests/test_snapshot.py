@@ -59,10 +59,10 @@ class SnapshotTests(unittest.TestCase):
             (repo / " nested.txt").write_text("new\n")
             (repo / "sub").mkdir()
             (repo / "sub" / "note.txt").write_text("new\n")
-            self.assertEqual(changed_paths(Path(observed["repo"]), base),
+            self.assertEqual(changed_paths(Path(observed["repo"]), base, observed["work_snapshot"]),
                              {"README.md", " nested.txt", "sub/note.txt"})
             with self.assertRaisesRegex(SnapshotError, "assigned base_head invalid"):
-                changed_paths(Path(observed["repo"]), "not-a-commit")
+                changed_paths(Path(observed["repo"]), "not-a-commit", observed["work_snapshot"])
 
     def test_rename_exposes_removed_and_added_paths(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -77,8 +77,38 @@ class SnapshotTests(unittest.TestCase):
             (repo / "allowed").mkdir()
             subprocess.run(["git", "-C", str(repo), "mv", "outside.txt", "allowed/moved.txt"],
                            check=True, capture_output=True)
-            self.assertEqual(changed_paths(Path(observed["repo"]), observed["base_head"]),
+            self.assertEqual(changed_paths(Path(observed["repo"]), observed["base_head"],
+                                           observed["work_snapshot"]),
                              {"outside.txt", "allowed/moved.txt"})
+
+    def test_changed_branch_or_rewound_head_cannot_publish_as_original_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = make_repo(Path(directory))
+            (repo / "README.md").write_text("second commit\n")
+            subprocess.run(["git", "-C", str(repo), "add", "README.md"],
+                           check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit", "-qm", "second"],
+                           check=True, capture_output=True)
+            observed = clean_snapshot(repo)
+            subprocess.run(["git", "-C", str(repo), "switch", "-q", "-c", "other"],
+                           check=True, capture_output=True)
+            with self.assertRaisesRegex(SnapshotError, "branch differs"):
+                changed_paths(Path(observed["repo"]), observed["base_head"],
+                              observed["work_snapshot"])
+            subprocess.run(["git", "-C", str(repo), "switch", "-q", "main"],
+                           check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit",
+                            "--allow-empty", "-qm", "forward"],
+                           check=True, capture_output=True)
+            self.assertEqual(changed_paths(Path(observed["repo"]), observed["base_head"],
+                                           observed["work_snapshot"]), set())
+            subprocess.run(["git", "-C", str(repo), "reset", "--hard", "HEAD~2"],
+                           check=True, capture_output=True)
+            with self.assertRaisesRegex(SnapshotError, "no longer an ancestor"):
+                changed_paths(Path(observed["repo"]), observed["base_head"],
+                              observed["work_snapshot"])
 
 
 if __name__ == "__main__":

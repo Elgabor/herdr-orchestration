@@ -27,7 +27,10 @@ rejects omissions, invented or duplicate names, and paths outside
 `write_scope`. Only the registered result JSON is excluded if it lives in
 the checkout; worker-declared artifacts cannot widen the scope. Git rename
 detection is disabled for this comparison so both the removed and added
-paths must be in scope. This checks
+paths must be in scope. The branch must still match the assigned snapshot,
+and the assigned HEAD must be an ancestor of the current HEAD. Forward
+commits remain possible; a branch switch or history rewind requires
+reconciliation. This checks
 paths, not file content, ignored files, concurrent writes after inspection,
 or the quality of the change. Owner diff review is still required.
 

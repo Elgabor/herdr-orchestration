@@ -129,6 +129,9 @@
   a result callback or owner return.
 - PASS: 85 offline tests. A staged rename from outside to inside the allowed
   path set now exposes both paths to `write_scope` validation.
+- PASS: 86 offline tests. A result publication on a different branch or
+  rewound HEAD now needs reconciliation, while a forward commit on the
+  assigned branch remains eligible for path review.
 - Next: final audit. Complete critical missing adapters
   only when their prerequisites and live tests are available.
   Remaining capability gaps must stay explicit in final delivery.

@@ -49,8 +49,8 @@ def clean_snapshot(repo: Path) -> dict:
             "work_snapshot": "clean-sha256:" + hashlib.sha256(payload.encode()).hexdigest()}
 
 
-def changed_paths(repo: Path, base_head: str) -> set[str]:
-    """List tracked and untracked path names since the assigned base; no file contents."""
+def changed_paths(repo: Path, base_head: str, work_snapshot: str) -> set[str]:
+    """List changed paths only on the branch assigned at the clean base."""
     repo = Path(repo)
     if not repo.is_absolute() or repo.is_symlink() or not repo.is_dir():
         raise SnapshotError("repo checkout path changed")
@@ -59,6 +59,15 @@ def changed_paths(repo: Path, base_head: str) -> set[str]:
         raise SnapshotError("repo is no longer the assigned canonical checkout")
     if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", base_head):
         raise SnapshotError("assigned base_head invalid")
+    branch = _git(repo, "symbolic-ref", "--quiet", "--short", "HEAD").decode("utf-8", "replace").strip()
+    payload = json.dumps([str(repo), branch, base_head, "clean"], separators=(",", ":"))
+    expected = "clean-sha256:" + hashlib.sha256(payload.encode()).hexdigest()
+    if expected != work_snapshot:
+        raise SnapshotError("checkout branch differs from assigned snapshot")
+    try:
+        _git(repo, "merge-base", "--is-ancestor", base_head, "HEAD")
+    except SnapshotError as error:
+        raise SnapshotError("assigned base is no longer an ancestor of HEAD") from error
     # A rename must expose both its old and new paths to write_scope checks.
     tracked = _git(repo, "diff", "--no-renames", "--name-only", "-z", base_head, "--")
     untracked = _git(repo, "ls-files", "--others", "--exclude-standard", "-z")

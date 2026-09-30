@@ -260,7 +260,8 @@ def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignme
         raise AssignmentError("protocol_error", str(error)) from error
     if assignment["repo"] is not None:
         try:
-            changed = changed_paths(Path(assignment["repo"]), assignment["base_head"])
+            changed = changed_paths(Path(assignment["repo"]), assignment["base_head"],
+                                    assignment["work_snapshot"])
         except SnapshotError as error:
             raise AssignmentError("needs_reconcile", str(error)) from error
         # Only the registered result file is an output outside write_scope.
