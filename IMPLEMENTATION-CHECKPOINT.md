@@ -8,8 +8,11 @@
   T07: conservative quota reader/catalog committed `d1dbaee`.
   T08: dispatch/result core and tests committed `f1e4013`; repository writes
   await a certified checkout snapshot gate.
-  T09: Pi owner bridge, correlated outbox/ack, and live Pi→Pi return verified;
-  commit pending. Other owners and crash recovery remain uncertified.
+  T09: Pi owner bridge, correlated outbox/ack, and live Pi→Pi return committed
+  `c21c992`. Other owners and crash recovery remain uncertified.
+  T10: versioned future instruction, dispatch pause and same-thread amendment
+  with queued/ack distinction implemented offline; commit pending. Targeted
+  cancel and native goal mutation remain capability-blocked.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -58,5 +61,10 @@
   syntax; corrected adapter text was not reloaded live.
 - NOT RUN: Codex, Claude Code, OpenCode owner bridges; Pi restart recovery,
   event loss, and burst fault injection. No model polling fallback enabled.
-- Next: commit the verified Pi bridge increment, then T10 control and T12
+- PASS: T10 offline tests distinguish queued amendment from worker result
+  acknowledgment; old revision and missing amendment ID cannot close the
+  task. Future instruction is consumed once, pause does not cancel active work.
+- NOT RUN: T10 live amendment/cancel/goal; cancel and native goal control are
+  blocked by absent certified adapters.
+- Next: commit T10 guarded controls, then T11 worker contract and T12
   recovery before the final skill rewrite and broad regression matrix.

@@ -251,6 +251,11 @@ def validate_result_binding(result: dict, assignment: dict) -> None:
     for key in ("run_id", "assignment_id", "member_id", "revision", "attempt", "conversation_id", "repo", "base_head", "work_snapshot"):
         if result[key] != assignment[key]:
             raise ContractError(f"{key}: expected assignment binding")
+    amendments = assignment.get("amendments", [])
+    if amendments:
+        expected = [item["amendment_id"] for item in amendments]
+        if result.get("acknowledged_amendments") != expected:
+            raise ContractError("acknowledged_amendments: worker has not confirmed current instructions")
 
 
 def read_result_file(root: Path, relative_path: str) -> dict:

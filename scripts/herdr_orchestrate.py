@@ -18,6 +18,7 @@ from herdr_runtime.native_reset import ResetError, new_conversation
 from herdr_runtime.quota import check_choice, read_quota, validate_catalog
 from herdr_runtime.assignment import AssignmentError, collect_event, dispatch, pending_events, publish_result
 from herdr_runtime.return_channel import PiReturnChannel
+from herdr_runtime.control import apply_control
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -123,6 +124,13 @@ def parser() -> argparse.ArgumentParser:
     collect.add_argument("--event-id", required=True)
     collect.add_argument("--owner-epoch", required=True, type=int)
     collect.add_argument("--state-dir", type=Path)
+    control = sub.add_parser("control", help="Apply one versioned owner instruction")
+    control_sub = control.add_subparsers(dest="control_command", required=True)
+    apply = control_sub.add_parser("apply")
+    apply.add_argument("--config", required=True, type=Path)
+    apply.add_argument("--expected-generation", required=True, type=int)
+    apply.add_argument("--owner-epoch", required=True, type=int)
+    apply.add_argument("--state-dir", type=Path)
     return root
 
 
@@ -148,6 +156,16 @@ def main() -> int:
             return envelope(outcome, choice["reason"], eligibility=choice["outcome"], profile_id=args.profile_id,
                             unknown=choice.get("unknown", []), cache=observed["cache"])
         client = HerdrClient()
+        if args.command == "control":
+            config = read_config(args.config)
+            run = apply_control(client, StateStore(state_dir(args.state_dir)), config,
+                                args.expected_generation, args.owner_epoch)
+            assignment = run["assignments"].get(config.get("assignment_id"))
+            latest = assignment.get("amendments", [])[-1] if assignment and config["type"] == "amend_assignment" else None
+            return envelope("ok", "owner control recorded; queued is not worker acceptance",
+                            run_id=run["run_id"], generation=run["generation"],
+                            control_type=config["type"], delivery=latest["delivery"] if latest else None,
+                            worker_ack=latest["worker_ack"] if latest else None)
         if args.command == "assignment" and args.assignment_command == "dispatch":
             if bool(args.bridge_dir) != bool(args.bridge_nonce):
                 raise ContractError("bridge-dir and bridge-nonce must be supplied together")

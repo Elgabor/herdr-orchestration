@@ -11,10 +11,10 @@ Before one task byte is sent, the core checks the owner tab, member occupant,
 idle/readiness state, assignment identity, explicit parallelism and writer
 conflicts. It requires a return channel to be armed, then persists
 `dispatching` with a handle. A lost send response is
-`delivery_uncertain`; the same assignment ID cannot be resent. The production
-return channel is not yet connected, so the CLI currently returns
-`capability_blocked` before creating an assignment. Repository assignments
-also remain blocked until their checkout snapshot can be verified.
+`delivery_uncertain`; the same assignment ID cannot be resent. The Pi owner
+bridge supplies the tested return path when its process-local command has
+armed a private proof. Other owner harnesses remain blocked. Repository
+assignments remain blocked until their checkout snapshot can be verified.
 
 `assignment publish` is available to the assigned worker pane after a
 dispatch exists. It reads at most 12 KiB from a safe relative path beneath
@@ -23,8 +23,21 @@ member, revision, attempt, conversation and repository identity. It records
 the result status and one stable outbox event. Repeating an identical result
 is idempotent; a different result for the same assignment is rejected.
 `result_ready` means a validated result is recorded. It is not project
-acceptance and does not release a worker still running. A `blocked` result
+acceptance and does not release a worker still running. The owner can list
+pending events and collect one event idempotently with `assignment pending`
+and `assignment collect`; a stale revision cannot close an amended task. A `blocked` result
 remains blocked even if Herdr later reports the agent idle.
+
+`control apply` takes a versioned config and expected run generation. A
+`future_instruction` stays in the run until the next assignment packet and
+does not prompt a busy worker. `pause_dispatch` only gates new assignments.
+`amend_assignment` increments the current revision before one same-pane
+prompt; a successful Herdr call is recorded as `queued`, not proof of worker
+acceptance. The worker result must carry the new revision and exact
+`acknowledged_amendments` IDs. The owner still judges whether the requested
+change was effective from the result content. Targeted cancel and native
+goal mutation are blocked until their process identity and callback paths
+are certified. No goal is created to keep the return path alive.
 
 The old `herdr_agent_turn.py --agent ... --prompt ...` interface cannot bind
 these identities or guarantee a return. It now reports the migration

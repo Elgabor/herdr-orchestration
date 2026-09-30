@@ -1,0 +1,6 @@
+{
+  "type": "future_instruction",
+  "run_id": "example-run",
+  "instruction_id": "future-1",
+  "instruction": "Apply this constraint to the next assignment only."
+}

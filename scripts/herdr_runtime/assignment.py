@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import copy
 
 from .context import TESTED_HERDR_VERSION, TESTED_PROTOCOL, inspect_team, verify_binding
 from .contracts import (ContractError, ID, MAX_RESULT_BYTES, SCHEMA_VERSION,
@@ -125,7 +126,11 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     if channel is None or not channel.supports(run["owner"], member):
         raise AssignmentError("capability_blocked", "same-owner return channel is not armed for this harness")
 
-    packet = _packet(config, store.root)
+    packet_config = copy.deepcopy(config)
+    future = run.get("future_instructions", [])
+    packet_config["instructions"] = ([item["text"] for item in future]
+                                     + packet_config["instructions"])
+    packet = _packet(packet_config, store.root)
     try:
         handle = channel.arm(run, assignment, member)
     except (ValueError, OSError) as error:
@@ -135,9 +140,11 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     saved["result_path"] = config["result_path"]
     saved["write_scope"] = config["write_scope"]
     saved["entry_points"] = config["entry_points"]
+    saved["future_instruction_ids"] = [item["instruction_id"] for item in future]
     saved["return_handle"] = handle
     saved["state"] = "dispatching"
     run["assignments"][saved["assignment_id"]] = saved
+    run["future_instructions"] = []
     _save(run, store, owner_epoch)
     try:
         completion = channel.send(member["pane_id"], packet, handle)
@@ -214,6 +221,8 @@ def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignme
         raise AssignmentError("needs_reconcile", "assignment is not accepting a result")
     assignment["result_digest"] = digest
     assignment["result_status"] = result["status"]
+    for amendment in assignment.get("amendments", []):
+        amendment["worker_ack"] = True
     assignment["state"] = "result_received"
     event = {"schema_version": SCHEMA_VERSION, "run_id": run_id,
              "assignment_id": assignment_id, "revision": assignment["revision"],
