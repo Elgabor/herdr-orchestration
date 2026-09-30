@@ -16,6 +16,7 @@ from herdr_runtime.transport import HerdrClient, HerdrError
 from herdr_runtime.provision import ProvisioningError, bootstrap_run, prepare_team
 from herdr_runtime.native_reset import ResetError, new_conversation
 from herdr_runtime.quota import check_choice, read_quota, validate_catalog
+from herdr_runtime.assignment import AssignmentError, dispatch, publish_result
 
 
 def envelope(outcome: str, message: str, **details: object) -> int:
@@ -96,6 +97,19 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--ttl-seconds", type=int, default=300)
         if operation == "check":
             command.add_argument("--mode", choices=("explicit", "existing", "auto_authorized"), required=True)
+    assignment = sub.add_parser("assignment", help="Dispatch one bounded worker task or publish its JSON result")
+    assignment_sub = assignment.add_subparsers(dest="assignment_command", required=True)
+    send = assignment_sub.add_parser("dispatch")
+    send.add_argument("--config", required=True, type=Path)
+    send.add_argument("--expected-generation", required=True, type=int)
+    send.add_argument("--owner-epoch", required=True, type=int)
+    send.add_argument("--state-dir", type=Path)
+    publish = assignment_sub.add_parser("publish")
+    publish.add_argument("--run-id", required=True)
+    publish.add_argument("--assignment-id", required=True)
+    publish.add_argument("--result-root", required=True, type=Path)
+    publish.add_argument("--result-path", required=True)
+    publish.add_argument("--state-dir", type=Path)
     return root
 
 
@@ -121,6 +135,18 @@ def main() -> int:
             return envelope(outcome, choice["reason"], eligibility=choice["outcome"], profile_id=args.profile_id,
                             unknown=choice.get("unknown", []), cache=observed["cache"])
         client = HerdrClient()
+        if args.command == "assignment" and args.assignment_command == "dispatch":
+            run = dispatch(client, StateStore(state_dir(args.state_dir)), read_config(args.config),
+                           args.expected_generation, args.owner_epoch)
+            return envelope("ok", "assignment dispatched with owner return armed",
+                            run_id=run["run_id"], generation=run["generation"])
+        if args.command == "assignment" and args.assignment_command == "publish":
+            run, result = publish_result(client, StateStore(state_dir(args.state_dir)),
+                                         args.run_id, args.assignment_id,
+                                         args.result_root, args.result_path)
+            return envelope("result_ready", "structured worker result recorded; owner collection pending",
+                            run_id=run["run_id"], assignment_id=args.assignment_id,
+                            worker_status=result["status"], generation=run["generation"])
         if args.command == "doctor":
             status = client.status()
             local, server = status.get("client", {}), status.get("server", {})
@@ -171,6 +197,8 @@ def main() -> int:
     except ProvisioningError as error:
         return envelope(error.outcome, str(error))
     except ResetError as error:
+        return envelope(error.outcome, str(error))
+    except AssignmentError as error:
         return envelope(error.outcome, str(error))
     except (HerdrError, UnsafePath) as error:
         return envelope("capability_blocked", str(error))

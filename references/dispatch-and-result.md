@@ -1,0 +1,32 @@
+# Assignment and result boundary
+
+`assignment dispatch` takes one versioned config bound to an existing run,
+frozen member, native conversation and context key. Distinct work needs a
+verified conversation reset first; a repair keeps the same assignment and
+conversation. The packet sent to a worker contains only its scoped
+instructions, acceptance criteria, entry points, write scope, output path
+and compact result contract. It does not copy the orchestration spec.
+
+Before one task byte is sent, the core checks the owner tab, member occupant,
+idle/readiness state, assignment identity, explicit parallelism and writer
+conflicts. It requires a return channel to be armed, then persists
+`dispatching` with a handle. A lost send response is
+`delivery_uncertain`; the same assignment ID cannot be resent. The production
+return channel is not yet connected, so the CLI currently returns
+`capability_blocked` before creating an assignment. Repository assignments
+also remain blocked until their checkout snapshot can be verified.
+
+`assignment publish` is available to the assigned worker pane after a
+dispatch exists. It reads at most 12 KiB from a safe relative path beneath
+the registered output root, rejects symlinks and validates run, assignment,
+member, revision, attempt, conversation and repository identity. It records
+the result status and one stable outbox event. Repeating an identical result
+is idempotent; a different result for the same assignment is rejected.
+`result_ready` means a validated result is recorded. It is not project
+acceptance and does not release a worker still running. A `blocked` result
+remains blocked even if Herdr later reports the agent idle.
+
+The old `herdr_agent_turn.py --agent ... --prompt ...` interface cannot bind
+these identities or guarantee a return. It now reports the migration
+arguments without issuing a Herdr call. Its new subcommands forward to the
+scoped CLI.

@@ -5,7 +5,9 @@
 - T01: DONE, commit `67a45f4`. T03: DONE, commit `ecb4332` (13 offline tests).
   T04: DONE, commit `4e2aca9`. T05: DONE, commit `c45afe9`.
   T06: Pi adapter committed `def8820`; other harnesses remain uncertified.
-  T07: conservative quota reader/catalog and tests complete, commit pending.
+  T07: conservative quota reader/catalog committed `d1dbaee`.
+  T08: dispatch/result core and tests complete, commit pending; production
+  dispatch awaits a certified T09 return channel and checkout snapshot gate.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -26,7 +28,7 @@
   woke the same owner session. Unsent editor text survived a second return.
 - NOT RUN: Codex/Claude/OpenCode owner return; Claude lacks credits. Codex
   startup hit a trust prompt, which was declined. No integration was updated.
-- PASS: 40 offline tests for contracts, tab scope, provisioning, native Pi
+- PASS: 49 offline tests for contracts, tab scope, provisioning, native Pi
   reset and state.
   Live `run init` stored an explicit one-worker plan before split; the first
   `team prepare` recorded pane `w3:p2` but found its shell not yet ready.
@@ -42,4 +44,9 @@
   balance, invalidate stale/account-shifted samples, and preserve an explicit
   profile. No live account quota was read; all four harness readers return
   unknown. Automatic cost choice stays `needs_info` without comparable data.
-- Next: commit T07, then T08 dispatch and structured result boundaries.
+- PASS: T08 fixture channel records `dispatching` before a single send,
+  rejects duplicate/lost-response resend, verifies result binding and
+  deduplicates publication. Production `assignment dispatch` remains
+  `capability_blocked` without a same-owner return channel; no live task
+  dispatch was claimed.
+- Next: commit T08, then T09 native Pi return channel and event recovery.

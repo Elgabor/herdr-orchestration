@@ -1,0 +1,24 @@
+{
+  "assignment": {
+    "schema_version": 1,
+    "run_id": "example-run",
+    "assignment_id": "example-assignment",
+    "member_id": "worker-1",
+    "context_key": "example-work",
+    "conversation_id": "replace-with-observed-native-session",
+    "revision": 0,
+    "attempt": 1,
+    "state": "prepared",
+    "return_to": "owner",
+    "repo": null,
+    "base_head": null,
+    "work_snapshot": null
+  },
+  "continuation_of": null,
+  "instructions": ["Perform the bounded assignment from the owner"],
+  "acceptance": ["Return a factual JSON result with verification states"],
+  "entry_points": [],
+  "write_scope": [],
+  "result_root": "/absolute/path/to/approved/output",
+  "result_path": "assignment-result.json"
+}
