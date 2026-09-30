@@ -47,8 +47,9 @@
 - PASS: Pi process-local extension returned the owner to idle while the worker
   ran; a user turn completed before release, then a native `sendUserMessage`
   woke the same owner session. Unsent editor text survived a second return.
-- NOT RUN: Codex/Claude/OpenCode owner return; Claude lacks credits. Codex
-  startup hit a trust prompt, which was declined. No integration was updated.
+- NOT RUN: Codex/Claude/OpenCode owner return; Claude lacks credits. An
+  initial Codex trust prompt was declined, then the user authorized trust
+  for the test folder only. No integration was updated.
 - PASS: 55 offline tests for contracts, tab scope, provisioning, native Pi
   reset and state.
   Live `run init` stored an explicit one-worker plan before split; the first
@@ -109,6 +110,23 @@
   paths must match tracked and non-ignored untracked Git changes and stay
   within `write_scope`; a declared artifact cannot exempt a project file.
   No new live publication was run after this check.
+- PARTIAL: Codex 0.155.1 ran one no-tool low-effort test turn in `w7:p1` and
+  replied correctly. FAIL: Herdr lifecycle stayed `unknown`, so `--wait`
+  timed out despite visible completion. Native `/new` showed a fresh TUI and
+  a new session ID on exit, but Herdr retained the earlier ID before exit.
+  Codex was exited; dedicated scoped agent list was empty. Codex owner
+  return and bound reset remain uncertified. No update was made.
+- PASS: after reviewing `references/integration-update-plan.md`, the owner
+  authorized only its isolated variant. Herdr installed Pi v9, OpenCode v13
+  and Claude v10 under the private test HOME. Read-only status confirms
+  those versions there and the older daily versions still in place. No
+  isolated-version model test has run; Claude remains blocked by credits.
+- PARTIAL: isolated Pi v9 loaded in a dedicated pane and reported native
+  identity plus `idle` without screen detection; no model call. Isolated
+  OpenCode v13 reached its TUI but has no provider in that empty home;
+  Herdr's `idle` came from screen fallback and no native session appeared.
+  Both agents exited; scoped agent list is empty. Neither startup certifies
+  a result callback or owner return.
 - Next: final audit. Complete critical missing adapters
   only when their prerequisites and live tests are available.
   Remaining capability gaps must stay explicit in final delivery.

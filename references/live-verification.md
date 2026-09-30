@@ -53,13 +53,36 @@ reset, block and quota evidence.
 | OpenCode | NOT_RUN | BLOCKED credits | NOT_RUN | NOT_RUN |
 
 Codex 0.155.1 reached a directory trust prompt during the earlier owner
-probe; it was declined, so no owner return was claimed. Claude Code 2.1.284
+probe; it was declined then. The user later authorized trust for the test
+folder only. In `w7:p1`, Codex ran a no-tool test turn using `gpt-6-luna`
+with low effort and replied exactly as requested. Herdr v8 reported a native
+session ID, but kept lifecycle `unknown`; `agent prompt --wait` timed out
+after 45 seconds even though the turn visibly completed. `/new` showed a
+fresh TUI and a new session ID on exit, while Herdr still showed the old
+identity before exit. The test Codex process exited; the scoped agent list
+returned zero. No Codex owner return, steering, or reset identity binding is
+certified. The Codex TUI reported 17,449 total tokens for that one test turn,
+mostly input context, despite the low-cost model and eight output tokens.
+Claude Code 2.1.284
 has no credits, per the user. OpenCode 1.18.33 is installed, but its Herdr
 integration v11 is behind installed v13. Pi 0.87.1 has integration v8 behind
 v9, yet the process-local bridge and reset were tested against the actual
-installed combination. No updates were applied. The Pi→Pi cell remains
+installed daily combination. After those live tests, the user authorized
+isolated Herdr integrations in the test folder: Pi v9, OpenCode v13 and
+Claude v10 now report current there; daily integrations remain unchanged.
+No model turn was run with the isolated versions. The Pi→Pi cell remains
 partial because active amendment, lost-listener recovery, goal pause,
 visibility and full fault injection are not live certified.
+
+After isolated installation, Pi v9 was started in test pane `w8:p1` with
+`PI_CODING_AGENT_DIR` pointing into the test home. Herdr reported `idle`, a
+native session path, and `screen_detection_skipped=true`; the agent exited
+without a model turn. OpenCode v13 started in `w9:p1` with test-only `HOME`.
+Its TUI requested `/connect`; no provider was available there. Herdr's
+`agent explain` attributed `idle` to screen fallback, not the new plugin,
+and no native session ID appeared. OpenCode exited without a model turn.
+The scoped agent list was again empty. These startup checks do not change
+the owner×worker matrix.
 
 ## Small scenario comparison
 
@@ -84,10 +107,11 @@ single scenarios and are not treated as account quota.
 
 ## Remaining gates and precise next action
 
-- **Codex owner/worker:** in the dedicated folder, resolve the trust decision
-  with the user, then test a process-local or native same-session callback,
-  pre-completion input and native clean reset. Do not infer support from
-  Herdr agent status.
+- **Codex owner/worker:** the dedicated-folder trust decision is resolved.
+  Investigate the observed `unknown` lifecycle and stale post-`/new` Herdr
+  identity, then test a process-local or native same-session callback,
+  pre-completion input and bound clean reset. Do not infer support from
+  visible Codex output alone.
 - **Claude Code:** obtain account credit authorization and refresh its
   outdated Herdr integration only after explicit authorization; then run
   the owner and worker gates on an isolated test session.

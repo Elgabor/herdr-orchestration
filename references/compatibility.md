@@ -9,7 +9,7 @@ was installed or updated.
 | Component | Latest stable release | Installed client | Server / protocol | Integration | Critical capability test |
 | --- | --- | --- | --- | --- | --- |
 | [Herdr](https://github.com/herdrdev/herdr/releases/tag/v0.9.2) | v0.9.2 | 0.9.2 | Dedicated server 0.9.2, protocol 22 | Not applicable | PASS for version match only |
-| [Codex CLI](https://github.com/openai/codex/releases/tag/rust-v0.159.0) | rust-v0.159.0 | 0.155.1 | Dedicated Herdr server protocol 22 | Current v8 | NOT RUN; startup trust prompt declined |
+| [Codex CLI](https://github.com/openai/codex/releases/tag/rust-v0.159.0) | rust-v0.159.0 | 0.155.1 | Dedicated Herdr server protocol 22 | Current v8 | PARTIAL; test turn passed but Herdr lifecycle stayed unknown |
 | [Claude Code](https://github.com/anthropics/claude-code/releases/tag/v2.1.284) | v2.1.284 | 2.1.284 | Dedicated Herdr server protocol 22 | Outdated v9 < v10 | NOT RUN; no credits |
 | [Pi](https://github.com/earendil-works/pi/releases/tag/v0.99.1) | v0.99.1 | 0.87.1 | Dedicated Herdr server protocol 22 | Outdated v8 < v9 | FAIL for blocking-wait steering; PASS for process-local native reset and return prototypes |
 | [OpenCode](https://github.com/anomalyco/opencode/releases/tag/v1.18.33) | v1.18.33 | 1.18.33 | Dedicated Herdr server protocol 22 | Outdated v11 < v13 | NOT RUN |
@@ -30,6 +30,26 @@ Read-only `herdr integration status` reports Codex current (v8), Pi outdated
 No integration was changed. A dedicated Herdr session, available accounts, and
 an authorized test budget are required for live checks. Test the installed
 Codex and Pi versions first; any upgrade needs a separate instruction.
+
+On 2026-09-30 the user authorized Codex trust for the test directory only.
+The dedicated Codex pane accepted that trust, ran one `gpt-6-luna` low-effort
+read-only turn, and replied correctly. Herdr's Codex integration reported a
+native session ID, but lifecycle stayed `unknown` and `agent prompt --wait`
+timed out after 45 seconds despite the visible completed turn. A native
+`/new` cleared the TUI and a distinct session ID appeared on exit, while
+Herdr still exposed the previous session ID before exit. The pane was exited
+and a scoped agent list reported zero agents. This does not certify Codex
+return, reset binding, or pre-completion steering. No Codex or Herdr binary
+was updated. The exact proposed integration plan is
+[here](integration-update-plan.md). Its isolated variant was subsequently
+authorized and executed: Pi v9, OpenCode v13 and Claude v10 are installed
+only under the dedicated test folder. Daily integration versions above are
+unchanged. No harness executable or account setting was updated.
+An isolated Pi v9 startup reported native identity and `idle` with screen
+detection skipped, without a model call. Isolated OpenCode v13 started, but
+the empty test home had no provider; its `idle` was a screen fallback and it
+reported no session identity. Neither observation certifies worker result
+or owner return. Claude was not started.
 
 The user subsequently authorized low-cost LLM tests in a dedicated folder.
 Claude Code has no credits. [The Pi owner gate](return-capability.md) found
