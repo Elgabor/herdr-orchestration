@@ -70,9 +70,10 @@ v9, yet the process-local bridge and reset were tested against the actual
 installed daily combination. After those live tests, the user authorized
 isolated Herdr integrations in the test folder: Pi v9, OpenCode v13 and
 Claude v10 now report current there; daily integrations remain unchanged.
-No model turn was run with the isolated versions. The Pi→Pi cell remains
-partial because active amendment, lost-listener recovery, goal pause,
-visibility and full fault injection are not live certified.
+At the time of those startup checks, no model turn had run with the isolated
+versions. The Pi→Pi cell remains partial because active amendment,
+lost-listener recovery, goal pause, visibility and full fault injection are
+not live certified.
 
 After isolated installation, Pi v9 was started in test pane `w8:p1` with
 `PI_CODING_AGENT_DIR` pointing into the test home. Herdr reported `idle`, a
@@ -83,6 +84,44 @@ Its TUI requested `/connect`; no provider was available there. Herdr's
 and no native session ID appeared. OpenCode exited without a model turn.
 The scoped agent list was again empty. These startup checks do not change
 the owner×worker matrix.
+
+An additional OpenCode Go probe used `wA:p1` in the same dedicated server,
+with `XDG_CONFIG_HOME` pointing to the test-local v13 integration and the
+existing OpenCode account consumed opaquely. The installed catalog listed
+`opencode-go/space-bunny-free` at zero input/output cost. A one-turn `agent
+prompt --wait` returned `done`, the visible TUI replied `OC_GO_OK`, and Herdr
+reported native session `ses_f0d55227fffeRbWeUGfDhm8RFb` with
+`screen_detection_skip_reason=full_lifecycle_hook_authority`. `/new` cleared
+the TUI in the same pane, but Herdr still reported the previous session ID
+until the next model turn. That turn replied `OC_NEW_OK` and reported native
+session `ses_f0d5491e5ffeMmCu8soAX6FY4V`. This certifies OpenCode Go
+access and the v13 lifecycle during turns. Immediate reset identity before
+a new turn and owner return remain **BLOCKED**. Both test sessions are
+designated for deletion during final cleanup; existing OpenCode sessions
+are untouched.
+
+## Same-process Pi listener reattachment
+
+In `wB:t1`, a Pi owner and worker used the existing daily Pi account and
+the repository's process-local extensions, with all state and session files
+under the dedicated test folder. The isolated Pi v9 directory was tried
+first, but had no model access; that attempt stopped before any model call.
+The daily Pi integration was not changed. The owner adopted one member,
+reset its native conversation, and dispatched `reattach-task` once. A
+deterministic gate held the worker in `working`.
+
+The original listener PID `7010` was checked against its owner PID and exact
+test `assignment dispatch` command, then sent TERM. The owner extension
+returned a listener error and one `assignment pending` check showed no event.
+While the worker remained active, `/herdrreattach` in that same owner process
+saved listener version 2 at generation 4 and called Herdr `agent wait` without
+a second prompt. After the gate was released, the worker published one
+correlated result. The same owner session received its event ID and collected
+it; generation 6 recorded `collected`, one outbox event with `received=true`,
+and `worker_released=true`. Both test Pi processes exited and the named
+session's agent list returned zero. This is a **PASS** for a lost listener in
+the same owner process. Owner process restart, non-Pi owners, and
+`events_lost` remain unverified.
 
 ## Small scenario comparison
 

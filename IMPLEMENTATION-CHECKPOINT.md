@@ -140,3 +140,31 @@
   cleanup, direct route execution and wider fault windows remain unfinished
   code work; four-owner certification and account-backed checks remain
   blocked or unrun as detailed in the coverage matrix.
+
+## Continuation, 2026-09-30
+
+- `6f5706a`: same-process Pi `/herdrreattach` saves a replacement listener
+  and calls Herdr `agent wait` without a second worker prompt. An epoch change,
+  live old listener, changed owner process, and missing result fail closed.
+  **PASS** 90 offline tests and `node --check`; production live reattach
+  **NOT_RUN**. Owner process restart and `events_lost` still unsupported.
+- OpenCode Go in dedicated `wA:p1`: **PASS** one free-model turn with visible
+  `OC_GO_OK`, native session ID and full v13 lifecycle hook authority. `/new`
+  in the same pane showed a blank TUI, then a second turn produced a new native
+  session ID and `OC_NEW_OK`. Immediate identity update before that turn
+  **FAIL**; native reset adapter and owner return remain **BLOCKED**. The
+  existing account was used opaquely with only test-local config; no account
+  setting was changed. The test agent exited; scoped list reported zero.
+- Amendment/result race: result publication now preserves the worker ack and
+  an acknowledged delivery state when a result arrives during amendment
+  prompt delivery. **PASS** 91 offline tests; live amendment **NOT_RUN**.
+- The prior "Remaining" paragraph was the status at commit `ad93672`.
+  Pi reattach is now implemented offline but still needs a live gate. Final
+  cleanup and publication have not yet run.
+- Pi reattach live gate subsequently **PASS**: in `wB:t1`, one worker prompt
+  was dispatched, exact listener PID `7010` was terminated while the worker
+  remained active, `/herdrreattach` saved listener version 2, and one result
+  reached the same owner and was collected at generation 6. No second worker
+  prompt. The test agents exited and scoped agent list was empty. Owner
+  process transfer and `events_lost` remain **NOT_RUN**. The immediately
+  preceding bullet records the status before this gate.

@@ -13,6 +13,12 @@ is evidence for adapter design, not a supported four-harness claim.
 | Claude Code 2.1.284 | NOT RUN | NOT RUN | NOT RUN | NOT RUN | Account has no credits, per user |
 | OpenCode 1.18.33 | NOT RUN | NOT RUN | NOT RUN | NOT RUN | Integration v11 is outdated against installed v13 |
 
+Later results supersede portions of this initial gate: the Pi production
+`/herdrreattach` passed a same-process listener-loss exercise, documented in
+[live verification](live-verification.md). OpenCode Go with test-local v13
+completed a turn and a `/new` plus second turn, but its owner return remains
+uncertified and its new session ID appeared only after that second turn.
+
 ## Pi experiment
 
 The test server and client were both Herdr 0.9.2, protocol 22, compatible.

@@ -51,6 +51,15 @@ the empty test home had no provider; its `idle` was a screen fallback and it
 reported no session identity. Neither observation certifies worker result
 or owner return. Claude was not started.
 
+A later OpenCode Go test kept the existing account data while redirecting only
+`XDG_CONFIG_HOME` to the test-local v13 integration. A free-model turn returned
+`done` with a native session ID and a visible answer; Herdr reported full
+lifecycle hook authority. `/new` cleared the TUI, but the new native ID
+appeared only after the next turn. No assignment/result callback or owner
+return was tested, so OpenCode remains uncertified for those roles. The two
+native test sessions are listed in [live verification](live-verification.md)
+for scoped cleanup.
+
 The user subsequently authorized low-cost LLM tests in a dedicated folder.
 Claude Code has no credits. [The Pi owner gate](return-capability.md) found
 working same-thread completion and reset, but failed pre-completion user input
@@ -58,9 +67,10 @@ with the blocking wait. The other owner adapters remain unverified.
 
 The later [Pi bridge test](return-capability.md#production-pi-bridge-exercise-2026-09-30)
 passed same-session wake, pre-completion user input and correlated result
-collection. [Recovery](recovery.md) currently handles only the same bound
-owner and completed/outbox state; it does not claim support for an owner
-process restart, an active worker with a lost listener, or a reused pane ID.
+collection. [Recovery](recovery.md) handles the same bound owner and
+completed/outbox state. Same-process Pi listener reattachment passed a live
+production exercise in the dedicated session. Owner process restart and
+reused pane IDs remain unsupported.
 
 ## Migration inventory
 

@@ -23,7 +23,8 @@ as with `/herdrdispatch`. The old listener PID must be absent and the owner,
 member, pane, scope, and epoch bindings must still match. The replacement
 handle is saved before waiting. A result arriving during the wait remains in
 the outbox; a missing result produces a protocol error. This path has offline
-fault tests and still needs a live production exercise. Owner transfer,
+fault tests and a live same-process Pi exercise described in
+[live verification](live-verification.md). Owner transfer,
 `events_lost` reconciliation, and support-process cleanup are not certified;
 these states return a blocking diagnosis. The helper never kills the Herdr
 server or removes an adopted pane. A stale pane ID after a server restart is

@@ -27,7 +27,7 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | X13 | PASS P geometry | NOT_RUN | TUI case absent. |
 | X14 | PASS P lost split response | NOT_RUN | No second split. |
 | X15 | PASS P failed start | PASS Pi retry same pane | Other harnesses NOT_RUN. |
-| X16 | PASS N | PASS Pi `/new` | Other worker harnesses NOT_RUN. |
+| X16 | PASS N | PASS Pi `/new`; PARTIAL OpenCode Go `/new` | OpenCode new ID appeared after first new turn, not immediately. Codex/Claude reset binding NOT_RUN. |
 | X17 | PASS N | PASS Pi reset without task wait | Other harnesses NOT_RUN. |
 | X18 | PARTIAL N changed session check | NOT_RUN | E NOT_RUN for clear/compact/fork. |
 | X19 | PASS U same-thread revision | NOT_RUN | E NOT_RUN; live repair absent. |
@@ -42,7 +42,7 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | X28 | PASS A working worker after result | NOT_RUN | Member not released. |
 | X29 | PASS A/R correlated return | PASS Pi→Pi | Other owner harnesses NOT_RUN. |
 | X30 | PARTIAL U revision logic | PASS Pi user turn before release | Live amendment absent. |
-| X31 | PARTIAL A no redispatch | PASS Pi prototype reattach after interrupt | Production reattach BLOCKED. |
+| X31 | PASS A same-owner reattach and epoch fault | PASS Pi production `/herdrreattach` after listener termination | Other owner harnesses BLOCKED; owner process restart NOT_RUN. |
 | X32 | NOT_RUN | PASS Pi prototype unsent draft | Production bridge draft NOT_RUN. |
 | X33 | PASS R arm proof | PASS Pi same-session wake | Other owner bridges BLOCKED. |
 | X34 | PARTIAL S/A dedup and race | NOT_RUN | Full crash-window scheduler absent. |
@@ -64,7 +64,7 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | X50 | PARTIAL K rejects handoff command | NOT_RUN | E NOT_RUN; quota redaction fault absent. |
 | X51 | PASS C/P scope/focus | PARTIAL Pi focus preserved | Concurrent client layout change NOT_RUN. |
 | X52 | PASS A/R one send/no transcript loop | PASS Pi quiet wait | E NOT_RUN; other owners blocked. |
-| X53 | PASS C version gate | PARTIAL live match; Codex lifecycle `unknown` | Hook/schema drift recovery NOT_RUN. |
+| X53 | PASS C version gate | PARTIAL live match; Codex lifecycle `unknown`; OpenCode v13 full hook on two turns | Hook/schema drift recovery NOT_RUN. |
 | X54 | PASS A output allowlist and Git path/branch checks | PASS Pi read-only result and synthetic repo write | Git publication hardening is offline only; other workers NOT_RUN. |
 | X55 | PASS N Pi config check | PASS Pi reset preserves config | Other worker harnesses BLOCKED. |
 | X56 | PASS PK links/metadata | NOT_RUN | Four-harness skill load absent. |
@@ -77,9 +77,9 @@ package. They live under `tests/test_<name>.py`. Live Pi evidence is in
 | R02 | PARTIAL | Pi scoped adoption tested; Codex/Claude/OpenCode owner cases absent. |
 | R03 | PARTIAL | Pi planned setup passed; automatic cost choice blocked by unknown quota. |
 | R04 | PARTIAL | No hidden agent in code or tests; full live harness matrix absent. |
-| R05 | PARTIAL | Pi reset passed; other native reset adapters absent, repair live absent. |
+| R05 | PARTIAL | Pi reset passed; OpenCode `/new` visible but Herdr identity lagged until first new turn; other adapters absent. |
 | R06 | PARTIAL | Bounded packet/result and 1,500-byte fixed contract guard tested; other harness contexts unverified. |
-| R07 | PARTIAL | Pi event return passed; other owners and lost-listener return blocked. |
+| R07 | PARTIAL | Pi event return and same-process listener reattach passed live; other owners blocked. |
 | R08 | PARTIAL | Pi owner user turn before worker finish passed; amendment live absent. |
 | R09 | PARTIAL | No-goal Pi passed; paused native goal case absent. |
 | R10 | PARTIAL | Offline parallel guard passed; broad behavioral eval absent. |

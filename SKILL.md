@@ -55,8 +55,11 @@ deterministic wait child and returns Pi to idle so the user can steer the owner
 while the worker runs. On completion it wakes the same Pi session. Do not use
 a blocking owner `agent prompt --wait`, UI notification, PID or background
 process as proof of interruptible return. Codex, Claude Code and OpenCode owner
-bridges remain uncertified. Never poll workers with model turns or redispatch
-after an ambiguous send. See [return evidence](references/return-capability.md).
+bridges remain uncertified. If that Pi listener is lost while the same owner
+process and worker survive, `/herdrreattach` can arm a new wait without a
+second prompt; verify its binding first. Never poll workers with model turns
+or redispatch after an ambiguous send. See
+[return evidence](references/return-capability.md).
 
 The worker writes a bounded JSON result and invokes the packet's
 `publish_command`. The owner uses `assignment pending` and `assignment
@@ -74,8 +77,9 @@ handling an active assignment.
 `resume inspect` compares the same owner and frozen roster to live bindings,
 reports pending events and gates new dispatch. Collect saved results, then
 `resume confirm` with the observed generation. Active work with a lost
-listener, changed owner or reused pane ID needs reconciliation; never send the
-task again to test whether it arrived. See [recovery](references/recovery.md).
+listener needs a bound reattach; changed owner or reused pane ID needs
+reconciliation. Never send the task again to test whether it arrived. See
+[recovery](references/recovery.md).
 
 `/goal` is optional and cannot supply the return channel. A paused goal stays
 paused. The helper does not decide a development workflow, number of repairs,
