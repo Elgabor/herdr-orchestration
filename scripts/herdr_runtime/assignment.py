@@ -106,6 +106,8 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     if run["scope"] != private["scope"] or not run["team_frozen"]:
         raise AssignmentError("scope_mismatch", "owner scope or roster changed")
     verify_binding(run["owner"], private["owner"], private["panes"].get(run["scope"]["owner_pane_id"]), run["scope"])
+    if private["owner"].get("agent_status") not in {"idle", "done"}:
+        raise AssignmentError("busy", "owner is not idle for native return arm")
     if run["pause_dispatch"]:
         raise AssignmentError("busy", "dispatch paused by owner")
     if run.get("awaiting_user_resume", False):

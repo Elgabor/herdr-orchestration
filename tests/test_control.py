@@ -22,6 +22,7 @@ class Client:
         self.data = json.loads((ROOT / "tests" / "fixtures" / "context.json").read_text())
         self.data["snapshot"]["agents"] = self.data["snapshot"]["agents"][:2]
         self.data["snapshot"]["panes"] = self.data["snapshot"]["panes"][:2]
+        self.data["snapshot"]["agents"][0]["agent_status"] = "done"
         self.data["snapshot"]["agents"][1]["interactive_ready"] = True
         self.prompts = []
 

@@ -22,6 +22,7 @@ class Client:
         self.data = json.loads((ROOT / "tests" / "fixtures" / "context.json").read_text())
         self.data["snapshot"]["agents"] = self.data["snapshot"]["agents"][:2]
         self.data["snapshot"]["panes"] = self.data["snapshot"]["panes"][:2]
+        self.data["snapshot"]["agents"][0]["agent_status"] = "done"
         self.data["snapshot"]["agents"][1]["interactive_ready"] = True
 
     def status(self):
@@ -40,6 +41,7 @@ class Channel:
         self.sends = []
         self.fail = False
         self.completion = None
+        self.on_send = None
 
     def supports(self, owner, member):
         return owner["harness"] == member["harness"] == "pi"
@@ -51,6 +53,8 @@ class Channel:
         saved = self.store.load_run("example-run")["assignments"]["example-assignment"]
         assert saved["state"] == "dispatching"
         self.sends.append((pane_id, packet, handle))
+        if self.on_send:
+            self.on_send()
         if self.fail:
             raise RuntimeError("transport response lost")
         return self.completion
@@ -118,6 +122,13 @@ class AssignmentTests(unittest.TestCase):
             self.send()
         self.assertEqual(self.channel.sends, [])
 
+    def test_busy_owner_sends_nothing(self):
+        self.client.data["snapshot"]["agents"][0]["agent_status"] = "working"
+        with self.assertRaisesRegex(AssignmentError, "owner is not idle"):
+            self.send()
+        self.assertEqual(self.channel.sends, [])
+        self.assertEqual(self.store.load_run("example-run")["assignments"], {})
+
     def test_lost_send_response_is_uncertain_and_not_retried(self):
         self.channel.fail = True
         with self.assertRaisesRegex(AssignmentError, "do not resend"):
@@ -126,6 +137,39 @@ class AssignmentTests(unittest.TestCase):
                          "delivery_uncertain")
         with self.assertRaisesRegex(AssignmentError, "already exists"):
             self.send()
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_result_racing_wait_completion_is_not_overwritten(self):
+        def publish_during_wait():
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+            result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+            result["conversation_id"] = "/test/worker.jsonl"
+            (self.root / "result.json").write_text(json.dumps(result))
+            publish_result(self.client, self.store, "example-run", "example-assignment",
+                           self.root, "result.json")
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+
+        self.channel.on_send = publish_during_wait
+        self.channel.completion = {"agent_status": "done"}
+        run = self.send()
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "result_received")
+        self.assertEqual(len(run["outbox"]), 1)
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_result_racing_lost_transport_response_is_preserved(self):
+        def publish_during_wait():
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+            result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+            result["conversation_id"] = "/test/worker.jsonl"
+            (self.root / "result.json").write_text(json.dumps(result))
+            publish_result(self.client, self.store, "example-run", "example-assignment",
+                           self.root, "result.json")
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+
+        self.channel.on_send = publish_during_wait
+        self.channel.fail = True
+        run = self.send()
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "result_received")
         self.assertEqual(len(self.channel.sends), 1)
 
     def test_result_published_from_worker_and_deduplicated(self):
@@ -213,6 +257,22 @@ class AssignmentTests(unittest.TestCase):
         second, _, _ = collect_event(self.client, self.store, "example-run", "example-assignment", key, 1)
         self.assertEqual(second["generation"], first["generation"])
         self.assertEqual(pending_events(self.client, self.store, "example-run", 1), [])
+
+    def test_result_recorded_while_worker_working_does_not_release_member(self):
+        self.send()
+        self.client.data["snapshot"]["agents"][1]["agent_status"] = "working"
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+        result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+        result["conversation_id"] = "/test/worker.jsonl"
+        (self.root / "result.json").write_text(json.dumps(result))
+        run, _ = publish_result(self.client, self.store, "example-run", "example-assignment",
+                                self.root, "result.json")
+        key = next(iter(run["outbox"]))
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+        _, value, released = collect_event(self.client, self.store, "example-run",
+                                           "example-assignment", key, 1)
+        self.assertEqual(value["status"], "done")
+        self.assertFalse(released)
 
     def test_repo_dispatch_blocks_until_snapshot_is_verifiable(self):
         self.config["assignment"].update(repo=str(self.root), base_head="a" * 40,

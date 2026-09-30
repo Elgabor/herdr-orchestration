@@ -20,8 +20,11 @@
   `545a0f7`. Lost-listener reattach, owner transfer, and cleanup remain
   capability-blocked.
   T13: short SKILL.md, aligned references, examples U01–U10, package tests
-  and reversible installation plan prepared; commit pending. No harness
+  and reversible installation plan committed `f3acd7e`. No harness
   profile or installed skill changed.
+  T14: four additional dispatch fault/busy/release tests, ten unrun behavior
+  eval scenarios and explicit X01–X56/R01–R18 coverage report prepared;
+  commit pending. The full fault matrix is not complete.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -84,8 +87,12 @@
   generation without worker prompt.
 - NOT RUN: lost owner/worker/server recovery live, listener reattach and owned
   resource cleanup.
-- PASS: 68 offline tests; T13 `SKILL.md` is 82 lines and about 670 words,
+- PASS: T13 `SKILL.md` is 82 lines and about 670 words,
   under the 180-line/1,500-word budget. Local links, scenario IDs and Codex
   metadata were checked. No four-harness skill loading was live tested.
-- Next: commit T13 package, then T14 regression matrix and T15 live report.
+- PASS: 74 offline tests, including result arriving during a wait, lost
+  transport reply after publication, busy owner before send, and result
+  collected while worker still working. `evals/scenarios.json` is a manifest,
+  not a completed LLM eval; every real eval remains `NOT_RUN`.
+- Next: commit T14 coverage increment, then T15 live report and final audit.
   Remaining capability gaps must stay explicit in final delivery.
