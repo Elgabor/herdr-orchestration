@@ -28,12 +28,7 @@ an explicit model or permission binding. Supported keys are `cwd`, `model`
 adapter preserves the observed pre-reset configuration; the owner remains
 responsible for checking that it matches the user's assignment.
 
-Live Pi test, 2026-09-29, named Herdr test session only: the native command
-created a fresh session in `w4:p1`; its follow-up inspection matched the prior
-configuration. Then an owner in `w4:p1` adopted a Pi worker in `w4:p2` and
-ran `conversation reset`. The CLI returned `ok` at generation 2, the worker
-remained `w4:p2` with the same terminal and occupant revision, its native
-session path changed, and the owner's path did not. No LLM task wait or worker
-restart was used. This certifies the tested Pi path only. Codex, Claude Code,
-and OpenCode native reset adapters still need live capability evidence before
-their mutations are enabled. Claude had no credits at the time of this test.
+The dedicated Pi live test confirmed a new worker session in the same pane,
+with its prior model and settings and the owner's session unchanged. Codex,
+Claude Code and OpenCode native reset adapters are not certified in this
+package.

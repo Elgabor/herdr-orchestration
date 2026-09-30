@@ -16,8 +16,7 @@ account balance. Claude lacks credits for live characterization. The private
 cache has a 300-second default TTL keyed by harness, version, provider,
 non-sensitive account reference, auth mode, model and effort. Expired samples
 return `stale` with null values until a certified reader refreshes them;
-account changes miss the old cache. The offline fixture seam tests known and
-expired data but is not a live quota source.
+account changes miss the old cache. Fixture data is not a live quota source.
 
 `quota check --mode explicit|existing|auto_authorized` evaluates the selected
 profile and preserves its identity. A configured model is never silently

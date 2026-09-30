@@ -1,3 +1,14 @@
 .DS_Store
 __pycache__/
 *.py[cod]
+
+# Local development evidence; keep the distributed skill runtime small.
+/tests/
+/evals/
+/IMPLEMENTATION-CHECKPOINT.md
+/references/delegation-loop.md
+/references/integration-update-plan.md
+/references/live-verification.md
+/references/orchestration-patterns.md
+/references/scenarios.md
+/scripts/herdr_agent_turn.py

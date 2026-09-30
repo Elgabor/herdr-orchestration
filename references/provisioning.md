@@ -29,10 +29,7 @@ explicit `--state-dir`; keep it outside the repository and do not copy it into
 worker prompts. `created_resources` distinguishes panes created by this run
 from preexisting shells. No cleanup is automatic.
 
-Dedicated live test, 2026-09-29: Pi owner in `w3:p1` initialized one-member
-plan in the named test session. First `team prepare` split `w3:p2`, then
-reported that the shell was not yet ready. It retained the pane and journal.
-After a bounded shell-readiness fix, retry with generation 3 started Pi in
-that same `w3:p2` and froze the roster at generation 6. No second split
-occurred; focus remained on `w2:p1` throughout. This certifies the observed
-Pi path in that session, not other harness startup or client visibility.
+The dedicated Pi live test confirmed that a temporary shell-readiness
+failure retained its pane and journal; retry started Pi in that same pane
+without another split. Other harness startup and client visibility remain
+uncertified.

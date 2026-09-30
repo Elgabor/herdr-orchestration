@@ -22,16 +22,13 @@ existing worker without sending a prompt. `STATE_DIR` must be URL encoded
 as with `/herdrdispatch`. The old listener PID must be absent and the owner,
 member, pane, scope, and epoch bindings must still match. The replacement
 handle is saved before waiting. A result arriving during the wait remains in
-the outbox; a missing result produces a protocol error. This path has offline
-fault tests and a live same-process Pi exercise described in
-[live verification](live-verification.md). Owner transfer,
+the outbox; a missing result produces a protocol error. This path passed
+offline fault tests and a live same-process Pi exercise. Owner transfer,
 `events_lost` reconciliation, and support-process cleanup are not certified;
 these states return a blocking diagnosis. The helper never kills the Herdr
 server or removes an adopted pane. A stale pane ID after a server restart is
 not an identity match.
 
-In the dedicated Pi→Pi test on 2026-09-30, the already collected assignment
-was recovered in generation 6, with one bound worker and no pending event.
-The owner confirmed at generation 6, producing generation 7. No worker
-prompt was sent during either operation. Owner-lost, worker-lost and server
-restart cases remain fixture-only or blocked, not live certified.
+The dedicated Pi→Pi test recovered an already collected assignment with one
+bound worker and no pending event; confirmation sent no worker prompt.
+Owner-lost, worker-lost and server restart cases remain unverified live.

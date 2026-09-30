@@ -28,15 +28,16 @@ Pi or OpenCode:
 Install herdr-orchestration for the harness we are using.
 
 Find the appropriate skills folder, alongside my existing skills or in this
-project, and clone the repository there:
-git clone https://github.com/Elgabor/herdr-orchestration.git
+project, and clone only the current revision there:
+git clone --depth 1 https://github.com/Elgabor/herdr-orchestration.git
 
 Preserve existing installations. Read SKILL.md and references/installation.md,
 verify that this harness can load the skill, and tell me how to use it.
 ```
 
-The agent handles the installation details for your harness. Keep the whole
-skill folder so it has the instructions, scripts and references it needs.
+The agent handles the installation details for your harness. The shallow
+clone includes the skill's instructions, scripts, adapters, templates and
+references without the historical test files.
 
 ## Use
 

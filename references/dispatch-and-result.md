@@ -57,7 +57,6 @@ change was effective from the result content. Targeted cancel and native
 goal mutation are blocked until their process identity and callback paths
 are certified. No goal is created to keep the return path alive.
 
-The old `herdr_agent_turn.py --agent ... --prompt ...` interface cannot bind
-these identities or guarantee a return. It now reports the migration
-arguments without issuing a Herdr call. Its new subcommands forward to the
-scoped CLI.
+Use `scripts/herdr_orchestrate.py` for every scoped operation. The old
+`herdr_agent_turn.py --agent ... --prompt ...` interface cannot bind these
+identities or guarantee a return and is not part of this package.

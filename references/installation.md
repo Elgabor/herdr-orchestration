@@ -2,10 +2,8 @@
 
 No installation is performed by this repository. Use the checked-out
 `herdr-orchestration` directory as the single canonical copy, with its
-`SKILL.md`, scripts, adapters, templates and references kept together. On
-this development host that source is
-`/Users/lorenzoborgato/code/herdr-orchestration`; replace it with the chosen
-checkout path on another machine. Never copy only `SKILL.md`.
+`SKILL.md`, scripts, adapters, templates and references kept together. Use
+the chosen checkout path on each machine. Never copy only `SKILL.md`.
 
 | Harness | Local discovery candidate | Invocation to verify after authorization |
 | --- | --- | --- |
