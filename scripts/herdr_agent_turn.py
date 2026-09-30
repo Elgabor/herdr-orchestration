@@ -10,7 +10,7 @@ from herdr_orchestrate import main as orchestrate_main
 
 
 def main() -> int:
-    if len(sys.argv) > 1 and sys.argv[1] in {"doctor", "team", "run", "conversation", "quota", "assignment"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"doctor", "team", "run", "conversation", "quota", "assignment", "control", "resume"}:
         return orchestrate_main()
     print(json.dumps({
         "schema_version": 1,

@@ -16,9 +16,12 @@
   T11: compact worker contract, read-only output allowlist, and bounded
   `next_handoff` data/grant validation committed `595d1de`.
   Automatic direct route is not certified and remains owner-mediated.
-  T12: same-owner resume inspect/confirm and dispatch gate implemented;
-  commit pending. Lost-listener reattach, owner transfer, and cleanup remain
+  T12: same-owner resume inspect/confirm and dispatch gate committed
+  `545a0f7`. Lost-listener reattach, owner transfer, and cleanup remain
   capability-blocked.
+  T13: short SKILL.md, aligned references, examples U01–U10, package tests
+  and reversible installation plan prepared; commit pending. No harness
+  profile or installed skill changed.
   T02 remains
   a partial gate: Pi process-local bridge is live-proven for
   wake, pre-completion input, and draft preservation. T02 remains BLOCKED for
@@ -76,10 +79,13 @@
   unplanned direct route cannot target a member outside the frozen roster.
 - NOT RUN: direct route live. A matching grant validates the result but does
   not dispatch a second worker automatically.
-- PASS: 65 offline tests. Live Pi same-owner `resume inspect` found one bound
+- PASS: live Pi same-owner `resume inspect` found one bound
   worker and no pending event, then explicit `resume confirm` advanced the
   generation without worker prompt.
 - NOT RUN: lost owner/worker/server recovery live, listener reattach and owned
   resource cleanup.
-- Next: commit T12 bounded recovery, then T13 skill rewrite and T14 regression
-  coverage. Remaining capability gaps must stay explicit in final delivery.
+- PASS: 68 offline tests; T13 `SKILL.md` is 82 lines and about 670 words,
+  under the 180-line/1,500-word budget. Local links, scenario IDs and Codex
+  metadata were checked. No four-harness skill loading was live tested.
+- Next: commit T13 package, then T14 regression matrix and T15 live report.
+  Remaining capability gaps must stay explicit in final delivery.

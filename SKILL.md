@@ -1,97 +1,82 @@
 ---
 name: herdr-orchestration
-description: Coordinate coding agents through Herdr with event-driven waits, compact handoffs, and owner-controlled acceptance. Use when the user explicitly asks for Herdr orchestration, multi-harness delegation, or an owner-worker ticket loop; it complements rather than replaces specification and engineering workflow skills.
+description: Use Herdr to coordinate explicitly authorized coding agents in real panes, with scoped assignments, native conversations, observable owner return, and compact results. Does not choose an engineering workflow or start extra agents on its own.
 metadata:
   short-description: Low-overhead Herdr agent coordination
 ---
 
 # Herdr Orchestration
 
-Herdr is the terminal control plane. Each harness still owns its model,
-permissions, tools, memory, and side effects. The owner/orchestrator owns task
-selection, acceptance, commits, and the final result.
+Herdr owns terminal layout and agent detection. Each coding harness owns its
+model, permissions, tools and native conversation. A **pane** is a terminal;
+its **occupant** can change; a **conversation** can change while the pane stays
+the same. Bind all three before sending work. The owner decides task scope,
+parallelism, acceptance and any later action. A worker performs the assigned
+work in a real Herdr pane and returns a compact result to that same owner.
 
-## Activation boundary
+## Activate and bind
 
-Designing a workflow can happen anywhere. Before controlling Herdr, require:
+From inside the intended owner pane, require `HERDR_ENV=1`. Use the installed
+Herdr client/server version and the local [compatibility matrix](references/compatibility.md).
+Run `python3 <skill-directory>/scripts/herdr_orchestrate.py doctor`, then
+`team inspect` to see only the caller's tab. Never use a global focused pane,
+a human label, or another tab as authority. If bindings or version checks are
+uncertain, stop that operation; do not switch sessions or update software.
 
-```sh
-test "${HERDR_ENV:-}" = 1
-```
+Adopt only the user-mapped members already in the tab with `run init` and an
+explicit config. If no team exists, `bootstrap_team` plus `team prepare`
+requires a user-authorized minimal plan; the roster then freezes. A busy
+member does not justify a new team. Keep configured provider, model, effort,
+trust and tools. Automatic choice needs comparable cost and quota evidence;
+unknown is unknown. Do not infer parallelism. See
+[provisioning](references/provisioning.md) and [usage](references/usage-and-routing.md)
+only for those decisions.
 
-If it fails, stop instead of controlling another Herdr session from outside.
-Use the requested harness, provider, model, and effort exactly; report an
-unavailable choice rather than substituting silently.
+## Assign, wait, return
 
-## Establish the run
+For distinct work, start a fresh **native conversation in the same worker
+pane** and verify its configuration. A repair stays in the same thread and
+sends only the change. The tested Pi reset uses `conversation reset`; other
+harness reset adapters remain unverified. See
+[native conversation](references/native-conversation.md) when changing tasks.
 
-Record only what changes decisions:
+Create one bounded `assignment dispatch` config with member, conversation,
+revision, scope, output path and acceptance. The default helper is
+`scripts/herdr_orchestrate.py`; paths in examples resolve from this skill
+directory. Read [worker contract](references/handoff-contract.md) when writing
+the task packet. A read-only task may write only its approved result outputs.
+Repo-writing dispatch is blocked until checkout snapshots are certified.
 
-- objective and verifiable stopping condition;
-- authority and actions that still require approval;
-- repo, branch or worktree, current commit, and one writer per checkout;
-- named owner, implementer, and optional researcher or reviewer;
-- ticket source, verification commands, repair budget, and external actions.
+Arm an observable same-owner return **before** dispatch. The tested Pi owner
+adapter is the process-local `adapters/pi/owner_return.ts`, loaded for that
+interactive Pi process, and its `/herdrdispatch` command. It starts one
+deterministic wait child and returns Pi to idle so the user can steer the owner
+while the worker runs. On completion it wakes the same Pi session. Do not use
+a blocking owner `agent prompt --wait`, UI notification, PID or background
+process as proof of interruptible return. Codex, Claude Code and OpenCode owner
+bridges remain uncertified. Never poll workers with model turns or redispatch
+after an ambiguous send. See [return evidence](references/return-capability.md).
 
-Reuse clear pane and agent names. Ask for a mapping only when existing panes are
-ambiguous. Herdr visibility never authorizes push, merge, deploy, installation,
-credential access, destructive cleanup, or approval dialogs.
+The worker writes a bounded JSON result and invokes the packet's
+`publish_command`. The owner uses `assignment pending` and `assignment
+collect` to acknowledge a correlated event once. `result_ready` is recorded
+evidence, not acceptance; worker `done` does not override a blocked result.
+Do not reset or reuse a worker still running. For steering, `control apply`
+supports future instructions, dispatch pause and a versioned amendment. A
+queued amendment is not worker acknowledgment; check its revision and IDs in
+the result. Targeted cancel and native goal mutation are blocked pending a
+certified adapter. See [dispatch](references/dispatch-and-result.md) when
+handling an active assignment.
 
-## Event-driven loop
+## Resume and authority
 
-For each bounded unit of work:
+`resume inspect` compares the same owner and frozen roster to live bindings,
+reports pending events and gates new dispatch. Collect saved results, then
+`resume confirm` with the observed generation. Active work with a lost
+listener, changed owner or reused pane ID needs reconciliation; never send the
+task again to test whether it arrived. See [recovery](references/recovery.md).
 
-1. Give the worker one complete prompt with scope, acceptance criteria,
-   boundaries, verification, and the compact handoff contract.
-2. Submit and wait atomically with `agent prompt --wait`. While the worker is
-   `working`, leave it alone.
-3. If the host exposes an ongoing process handle, wait on that same handle with
-   the longest supported wait. Do not replace it with state, pane, or log polls.
-4. On `done` or `idle`, read the compact handoff and inspect only the relevant
-   diff, files, and test evidence.
-5. Decide `ACCEPT`, `REPAIR`, `RESEARCH`, or `BLOCK`. Keep a repair on the same
-   worker session and send only the delta. Start research only for a concrete
-   unresolved question.
-6. After acceptance, the owner performs the authorized commit or tracking
-   update and advances to the next unit.
-
-Default to one repair attempt unless the user or approved workflow sets another
-budget. A worker report is evidence, never acceptance.
-
-For the deterministic wait and compact result envelope, run:
-
-```sh
-python3 <skill-directory>/scripts/herdr_agent_turn.py \
-  --agent implementer --prompt-file /path/to/prompt.md
-```
-
-The helper invokes the named Herdr agent exactly once; it contains no provider
-routing and never retries. Read
-[`references/handoff-contract.md`](references/handoff-contract.md) before
-constructing worker prompts. For ticket queues, research gates, repair rules,
-and `/goal`, read
-[`references/delegation-loop.md`](references/delegation-loop.md).
-
-## Lifecycle rules
-
-- `working`: wait without messaging or polling.
-- `blocked`: inspect once and request the necessary human decision; never
-  auto-approve.
-- `done` or `idle`: ready for handoff inspection or another prompt.
-- `unknown`: inconclusive; use `agent get` or `agent explain`, not acceptance.
-- `timeout` or `agent_prompt_stalled`: the prompt may have been delivered.
-  Inspect once before deciding; never resubmit automatically.
-
-Use pane commands for tests, servers, and ordinary processes. Use agent commands
-only for recognized agents. If a full response is unavailable, request a file
-path instead of repeatedly expanding terminal history.
-
-## Durable goals
-
-`/goal` is optional continuity for work that may outlive one owner turn. It is
-not a scheduler and does not justify polling. Keep the authoritative queue and
-checkpoint outside the conversation; resume from current ticket, accepted
-commits, open decision, and verification state rather than replaying transcripts.
-
-For topology, direct CLI alternatives, worktrees, and recovery examples, read
-[`references/orchestration-patterns.md`](references/orchestration-patterns.md).
+`/goal` is optional and cannot supply the return channel. A paused goal stays
+paused. The helper does not decide a development workflow, number of repairs,
+review requirement, commit policy or model quality. It does not authorize
+push, merge, deploy, installation, credential access or destructive cleanup.
