@@ -3,7 +3,12 @@ __pycache__/
 *.py[cod]
 
 # Local development evidence; keep the distributed skill runtime small.
-/tests/
+/tests/*
+!/tests/test_snapshot.py
+!/tests/test_assignment.py
+!/tests/fixtures/
+/tests/fixtures/*
+!/tests/fixtures/context.json
 /evals/
 /IMPLEMENTATION-CHECKPOINT.md
 /references/delegation-loop.md

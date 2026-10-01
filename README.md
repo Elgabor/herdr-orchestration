@@ -37,7 +37,9 @@ verify that this harness can load the skill, and tell me how to use it.
 
 The agent handles the installation details for your harness. The shallow
 clone includes the skill's instructions, scripts, adapters, templates and
-references without the historical test files.
+references and a small offline regression suite for checkout scope checks.
+
+Run those regressions with `python3 -m unittest discover -s tests`.
 
 ## Use
 

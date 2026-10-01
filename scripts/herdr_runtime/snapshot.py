@@ -15,7 +15,9 @@ class SnapshotError(RuntimeError):
 
 def _git(repo: Path, *args: str) -> bytes:
     try:
-        process = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
+        # git diff can refresh index stat data even during a read-only query.
+        process = subprocess.run(["git", "--no-optional-locks", "-c", "diff.autoRefreshIndex=false",
+                                  "-C", str(repo), *args], capture_output=True,
                                  check=False, timeout=10)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise SnapshotError("git checkout inspection unavailable") from error
@@ -50,7 +52,7 @@ def clean_snapshot(repo: Path) -> dict:
 
 
 def changed_paths(repo: Path, base_head: str, work_snapshot: str) -> set[str]:
-    """List changed paths only on the branch assigned at the clean base."""
+    """List committed, staged, unstaged and untracked paths on the assigned branch."""
     repo = Path(repo)
     if not repo.is_absolute() or repo.is_symlink() or not repo.is_dir():
         raise SnapshotError("repo checkout path changed")
@@ -68,10 +70,23 @@ def changed_paths(repo: Path, base_head: str, work_snapshot: str) -> set[str]:
         _git(repo, "merge-base", "--is-ancestor", base_head, "HEAD")
     except SnapshotError as error:
         raise SnapshotError("assigned base is no longer an ancestor of HEAD") from error
-    # A rename must expose both its old and new paths to write_scope checks.
-    tracked = _git(repo, "diff", "--no-renames", "--name-only", "-z", base_head, "--")
+    # Keep every Git layer: a later edit can cancel an earlier change when
+    # comparing only the base to the working tree. Disable rename detection
+    # in each diff so write_scope checks see both the old and new paths.
+    diff_args = ("--no-renames", "--name-only", "-z")
+    tracked = (
+        _git(repo, "diff", *diff_args, base_head, "HEAD", "--")
+        + _git(repo, "diff", "--cached", *diff_args, "HEAD", "--")
+    )
+    # --name-only can report stat-only changes with index refresh disabled.
+    # --numstat checks content without writing the index; split just the two
+    # count fields so tabs (as well as newlines) in path names remain intact.
+    unstaged = _git(repo, "diff", "--no-renames", "--no-ext-diff", "--no-textconv",
+                    "--numstat", "-z", "--")
     untracked = _git(repo, "ls-files", "--others", "--exclude-standard", "-z")
     try:
-        return {item.decode("utf-8") for item in (tracked + untracked).split(b"\0") if item}
+        paths = (tracked + untracked).split(b"\0")
+        paths.extend(item.split(b"\t", 2)[2] for item in unstaged.split(b"\0") if item)
+        return {item.decode("utf-8") for item in paths if item}
     except UnicodeError as error:
         raise SnapshotError("changed path is not UTF-8") from error
