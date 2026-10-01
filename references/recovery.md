@@ -29,6 +29,14 @@ these states return a blocking diagnosis. The helper never kills the Herdr
 server or removes an adopted pane. A stale pane ID after a server restart is
 not an identity match.
 
+A matching recorded or collected result returns without arming or waiting on
+another listener. A result arriving while the replacement is being armed also
+prevents the listener write and wait. Listener registration and wait completion
+merge local CAS conflicts while checking the original identity, owner epoch,
+attempt and listener. Amendments retain their current revision. See
+`dispatch-and-result.md` for bounded retry, error and snapshot limitations; the
+new offline regressions do not extend the previous live certification.
+
 The dedicated Pi→Pi test recovered an already collected assignment with one
 bound worker and no pending event; confirmation sent no worker prompt.
 Owner-lost, worker-lost and server restart cases remain unverified live.

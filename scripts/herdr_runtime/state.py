@@ -19,6 +19,10 @@ class StateConflict(RuntimeError):
     pass
 
 
+class _GenerationConflict(StateConflict):
+    """A CAS lost to another writer; other state conflicts must not be retried."""
+
+
 class UnsafePath(RuntimeError):
     pass
 
@@ -153,7 +157,7 @@ class StateStore:
             current = _read_json(path)
             validate_run(current)
             if current["generation"] != expected_generation or current["owner_epoch"] != owner_epoch:
-                raise StateConflict("generation or owner_epoch changed")
+                raise _GenerationConflict("generation or owner_epoch changed")
             if run["owner_epoch"] != owner_epoch or run["generation"] != expected_generation + 1:
                 raise StateConflict("new generation or owner_epoch invalid")
             if run["run_id"] != current["run_id"] or run["scope"] != current["scope"]:

@@ -12,7 +12,7 @@ from .context import TESTED_HERDR_VERSION, TESTED_PROTOCOL, inspect_team, verify
 from .contracts import (ContractError, ID, MAX_RESULT_BYTES, SCHEMA_VERSION,
                         event_id, read_result_file, validate_assignment,
                         validate_result_binding)
-from .state import StateStore
+from .state import StateStore, _GenerationConflict
 from .transport import HerdrClient, HerdrError
 from .snapshot import SnapshotError, changed_paths, clean_snapshot
 
@@ -31,6 +31,112 @@ def _save(run: dict, store: StateStore, epoch: int) -> dict:
     generation = run["generation"]
     run["generation"] += 1
     return store.update_run(run, expected_generation=generation, owner_epoch=epoch)
+
+
+def _change_assignment(store: StateStore, baseline: dict, assignment_id: str, change,
+                       *, allow_revision: bool = False, check_listener: bool = False) -> dict:
+    """Retry only a local CAS, never an external action or wait.
+
+    Each retry merges into fresh state. Identity/epoch/attempt changes invalidate
+    the operation; an amendment may advance the revision only for wait completion
+    or amendment delivery. No lock is held while invoking the channel.
+    """
+    original = baseline["assignments"][assignment_id]
+    member = next((item for item in baseline["members"]
+                   if item["member_id"] == original["member_id"]), None)
+    identity = ("schema_version", "run_id", "assignment_id", "member_id", "context_key",
+                "conversation_id", "attempt", "return_to", "repo", "base_head",
+                "work_snapshot", "result_root", "result_path", "write_scope",
+                "entry_points", "future_instruction_ids", "route_grant")
+    for attempt in range(9):
+        latest = store.load_run(baseline["run_id"])
+        current = latest["assignments"].get(assignment_id)
+        bound = next((item for item in latest["members"]
+                      if item["member_id"] == original["member_id"]), None)
+        if check_listener and latest["owner_epoch"] != baseline["owner_epoch"]:
+            raise AssignmentError("needs_reconcile", "listener changed during wait")
+        if (latest["run_id"] != baseline["run_id"] or latest["scope"] != baseline["scope"]
+                or latest["owner"] != baseline["owner"]
+                or latest["owner_epoch"] != baseline["owner_epoch"]
+                or latest["generation"] < baseline["generation"]
+                or member is None or bound != member or current is None
+                or any(current.get(key) != original.get(key) for key in identity)
+                or current["conversation_id"] != bound["conversation_id"]
+                or current["context_key"] != bound.get("context_key")):
+            raise AssignmentError("needs_reconcile", "assignment binding or owner changed during operation")
+        if check_listener and current.get("return_handle") != original.get("return_handle"):
+            raise AssignmentError("needs_reconcile", "listener changed during wait")
+        if (current["revision"] < original["revision"]
+                or (not allow_revision and current["revision"] != original["revision"])):
+            raise AssignmentError("needs_reconcile", "assignment revision changed during operation")
+        old_amendments = original.get("amendments", [])
+        amendments = current.get("amendments", [])
+        if (len(amendments) < len(old_amendments) or any(
+            any(old.get(key) != new.get(key) for key in ("amendment_id", "revision", "instruction"))
+            for old, new in zip(old_amendments, amendments)
+        )):
+            raise AssignmentError("needs_reconcile", "assignment amendments changed during operation")
+        if not change(latest, current):
+            return latest
+        if attempt == 8:
+            break  # Still allow a terminal winner after the last failed write.
+        try:
+            return _save(latest, store, baseline["owner_epoch"])
+        except _GenerationConflict:
+            # The failed CAS has not written anything. Revalidate all bindings
+            # and recompute the transition against the winner's state.
+            continue
+    raise AssignmentError("needs_reconcile", "concurrent state updates did not settle; task was not resent")
+
+
+def _has_result(run: dict, assignment: dict) -> bool:
+    if assignment["state"] not in {"result_received", "collected"}:
+        return False
+    event = {"schema_version": SCHEMA_VERSION, "run_id": run["run_id"],
+             "assignment_id": assignment["assignment_id"], "revision": assignment["revision"],
+             "attempt": assignment["attempt"], "type": "result_ready",
+             "result_digest": assignment.get("result_digest")}
+    try:
+        item = run["outbox"].get(event_id(event))
+    except ContractError as error:
+        raise AssignmentError("needs_reconcile", "terminal assignment has no valid result digest") from error
+    if (not item or item["event"] != event
+            or (assignment["state"] == "collected" and not item["received"])):
+        raise AssignmentError("needs_reconcile", "terminal assignment has no matching result event")
+    return True
+
+
+def _finish_wait(store: StateStore, baseline: dict, assignment_id: str, completion,
+                 *, reattach: bool = False, failed: bool = False) -> dict:
+    def change(latest, current):
+        if _has_result(latest, current):
+            return False
+        waiting = {"dispatching", "active", "delivery_uncertain", "needs_reconcile"}
+        if current["state"] not in (waiting if reattach else {"dispatching"}):
+            raise AssignmentError("needs_reconcile", "assignment changed while waiting")
+        if failed:
+            current["state"] = "needs_reconcile" if reattach else "delivery_uncertain"
+            return True
+        if completion is None and not reattach:  # Offline channel, no production wait.
+            current["state"] = "active"
+            return True
+        lifecycle = completion.get("agent_status") if isinstance(completion, dict) else None
+        current["worker_lifecycle"] = lifecycle or "unknown"
+        if lifecycle in {"done", "idle", "blocked"}:
+            current["state"] = "blocked" if lifecycle == "blocked" else "protocol_error"
+            digest = hashlib.sha256(
+                f"missing-result:{assignment_id}:{current['revision']}".encode()).hexdigest()
+            event = {"schema_version": SCHEMA_VERSION, "run_id": latest["run_id"],
+                     "assignment_id": assignment_id, "revision": current["revision"],
+                     "attempt": current["attempt"], "type": current["state"], "result_digest": digest}
+            latest["outbox"].setdefault(event_id(event), {
+                "event": event, "received": False, "action_intent": None, "applied": False})
+        else:
+            current["state"] = "needs_reconcile"
+        return True
+
+    return _change_assignment(store, baseline, assignment_id, change,
+                              allow_revision=True, check_listener=True)
 
 
 def validate_dispatch_config(config: dict) -> dict:
@@ -191,39 +297,19 @@ def dispatch(client: HerdrClient, store: StateStore, config: dict, expected_gene
     saved["state"] = "dispatching"
     run["assignments"][saved["assignment_id"]] = saved
     run["future_instructions"] = []
-    _save(run, store, owner_epoch)
+    baseline = copy.deepcopy(_save(run, store, owner_epoch))
     try:
         completion = channel.send(member["pane_id"], packet, handle)
-    except Exception as error:
-        latest = store.load_run(run["run_id"])
-        current = latest["assignments"][saved["assignment_id"]]
-        if current["state"] == "result_received":
+    except RuntimeError as error:
+        # Legacy channels use plain RuntimeError for uncertain delivery. Do not
+        # absorb more specific state or implementation errors from the channel.
+        if type(error) is not RuntimeError and not isinstance(error, HerdrError):
+            raise
+        latest = _finish_wait(store, baseline, saved["assignment_id"], None, failed=True)
+        if _has_result(latest, latest["assignments"][saved["assignment_id"]]):
             return latest
-        current["state"] = "delivery_uncertain"
-        _save(latest, store, owner_epoch)
         raise AssignmentError("delivery_uncertain", "task delivery uncertain; do not resend") from error
-    latest = store.load_run(run["run_id"])
-    current = latest["assignments"][saved["assignment_id"]]
-    if current["state"] == "result_received":
-        return latest
-    if current["state"] != "dispatching":
-        raise AssignmentError("needs_reconcile", "assignment changed while waiting")
-    if completion is None:  # Offline fake channel; production wait returns a Herdr agent.
-        current["state"] = "active"
-        return _save(latest, store, owner_epoch)
-    lifecycle = completion.get("agent_status") if isinstance(completion, dict) else None
-    current["worker_lifecycle"] = lifecycle or "unknown"
-    if lifecycle in {"done", "idle", "blocked"}:
-        current["state"] = "blocked" if lifecycle == "blocked" else "protocol_error"
-        digest = hashlib.sha256(f"missing-result:{saved['assignment_id']}:{saved['revision']}".encode()).hexdigest()
-        event = {"schema_version": SCHEMA_VERSION, "run_id": run["run_id"],
-                 "assignment_id": saved["assignment_id"], "revision": saved["revision"],
-                 "attempt": saved["attempt"], "type": current["state"], "result_digest": digest}
-        key = event_id(event)
-        latest["outbox"][key] = {"event": event, "received": False, "action_intent": None, "applied": False}
-    else:
-        current["state"] = "needs_reconcile"
-    return _save(latest, store, owner_epoch)
+    return _finish_wait(store, baseline, saved["assignment_id"], completion)
 
 
 def reattach_wait(client: HerdrClient, store: StateStore, run_id: str, assignment_id: str,
@@ -241,15 +327,18 @@ def reattach_wait(client: HerdrClient, store: StateStore, run_id: str, assignmen
     assignment = run["assignments"].get(assignment_id)
     if not assignment:
         raise AssignmentError("protocol_error", "assignment absent")
-    if assignment["state"] == "result_received":
-        return run
-    if assignment["state"] not in {"dispatching", "active", "delivery_uncertain", "needs_reconcile"}:
-        raise AssignmentError("needs_reconcile", "assignment is not waiting for a result")
     member = next((item for item in run["members"] if item["member_id"] == assignment["member_id"]), None)
     live = next((item for item in private["agents"] if member and item["pane_id"] == member["pane_id"]), None)
     if not member:
         raise AssignmentError("identity_changed", "assigned member missing from frozen roster")
     verify_binding(member, live, private["panes"].get(member["pane_id"]), run["scope"])
+    if (assignment["conversation_id"] != member["conversation_id"]
+            or assignment["context_key"] != member.get("context_key")):
+        raise AssignmentError("identity_changed", "assignment conversation/context differs from member")
+    if _has_result(run, assignment):
+        return run
+    if assignment["state"] not in {"dispatching", "active", "delivery_uncertain", "needs_reconcile"}:
+        raise AssignmentError("needs_reconcile", "assignment is not waiting for a result")
     if live.get("agent_status") not in {"working", "blocked", "idle", "done"}:
         raise AssignmentError("needs_reconcile", "worker lifecycle is unknown")
     previous = assignment.get("return_handle")
@@ -277,40 +366,30 @@ def reattach_wait(client: HerdrClient, store: StateStore, run_id: str, assignmen
     else:
         raise AssignmentError("busy", "original listener is still running")
     handle["listener_version"] = previous.get("listener_version", 1) + 1
-    assignment["return_handle"] = handle
-    _save(run, store, owner_epoch)
+
+    def replace_listener(latest, current):
+        if _has_result(latest, current):
+            return False
+        if current["state"] not in {"dispatching", "active", "delivery_uncertain", "needs_reconcile"}:
+            raise AssignmentError("needs_reconcile", "assignment changed before listener replacement")
+        current["return_handle"] = handle
+        return True
+
+    run = _change_assignment(store, run, assignment_id, replace_listener,
+                             allow_revision=True, check_listener=True)
+    if _has_result(run, run["assignments"][assignment_id]):
+        return run
+    baseline = copy.deepcopy(run)
     try:
         completion = channel.wait_existing(member["pane_id"], handle)
-    except HerdrError as error:
-        latest = store.load_run(run_id)
-        current = latest["assignments"][assignment_id]
-        if current.get("return_handle") != handle or latest["owner_epoch"] != owner_epoch:
-            raise AssignmentError("needs_reconcile", "listener changed during wait") from error
-        if current["state"] == "result_received":
+    except RuntimeError as error:
+        if type(error) is not RuntimeError and not isinstance(error, HerdrError):
+            raise
+        latest = _finish_wait(store, baseline, assignment_id, None, reattach=True, failed=True)
+        if _has_result(latest, latest["assignments"][assignment_id]):
             return latest
-        current["state"] = "needs_reconcile"
-        _save(latest, store, owner_epoch)
         raise AssignmentError("needs_reconcile", "existing-worker wait failed; task was not resent") from error
-    latest = store.load_run(run_id)
-    current = latest["assignments"][assignment_id]
-    if current.get("return_handle") != handle or latest["owner_epoch"] != owner_epoch:
-        raise AssignmentError("needs_reconcile", "listener changed during wait")
-    if current["state"] == "result_received":
-        return latest
-    lifecycle = completion.get("agent_status") if isinstance(completion, dict) else None
-    current["worker_lifecycle"] = lifecycle or "unknown"
-    if lifecycle in {"idle", "done", "blocked"}:
-        current["state"] = "blocked" if lifecycle == "blocked" else "protocol_error"
-        digest = hashlib.sha256(f"missing-result:{assignment_id}:{current['revision']}".encode()).hexdigest()
-        event = {"schema_version": SCHEMA_VERSION, "run_id": run_id,
-                 "assignment_id": assignment_id, "revision": current["revision"],
-                 "attempt": current["attempt"], "type": current["state"], "result_digest": digest}
-        key = event_id(event)
-        latest["outbox"].setdefault(key, {"event": event, "received": False,
-                                          "action_intent": None, "applied": False})
-    else:
-        current["state"] = "needs_reconcile"
-    return _save(latest, store, owner_epoch)
+    return _finish_wait(store, baseline, assignment_id, completion, reattach=True)
 
 
 def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignment_id: str,
@@ -366,24 +445,32 @@ def publish_result(client: HerdrClient, store: StateStore, run_id: str, assignme
                for path in changed):
             raise AssignmentError("scope_mismatch", "Git change lies outside assigned write_scope")
     digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    if assignment["state"] == "result_received":
-        if assignment.get("result_digest") == digest:
-            return run, result
-        raise AssignmentError("protocol_error", "different result already published for assignment")
-    if assignment["state"] not in {"active", "dispatching"}:
-        raise AssignmentError("needs_reconcile", "assignment is not accepting a result")
-    assignment["result_digest"] = digest
-    assignment["result_status"] = result["status"]
-    for amendment in assignment.get("amendments", []):
-        amendment["worker_ack"] = True
-        amendment["delivery"] = "acknowledged"
-    assignment["state"] = "result_received"
-    event = {"schema_version": SCHEMA_VERSION, "run_id": run_id,
-             "assignment_id": assignment_id, "revision": assignment["revision"],
-             "attempt": assignment["attempt"], "type": "result_ready", "result_digest": digest}
-    key = event_id(event)
-    run["outbox"][key] = {"event": event, "received": False, "action_intent": None, "applied": False}
-    _save(run, store, run["owner_epoch"])
+
+    def change(latest, current):
+        validate_result_binding(result, current)
+        if _has_result(latest, current):
+            if current.get("result_digest") == digest:
+                return False
+            raise AssignmentError("protocol_error", "different result already published for assignment")
+        # A wait observation or delivery failure is not a worker result. Keep
+        # its diagnostic event, but accept a later bound result for this attempt.
+        if current["state"] not in {"active", "dispatching", "delivery_uncertain",
+                                    "needs_reconcile", "blocked", "protocol_error"}:
+            raise AssignmentError("needs_reconcile", "assignment is not accepting a result")
+        current["result_digest"] = digest
+        current["result_status"] = result["status"]
+        for amendment in current.get("amendments", []):
+            amendment["worker_ack"] = True
+            amendment["delivery"] = "acknowledged"
+        current["state"] = "result_received"
+        event = {"schema_version": SCHEMA_VERSION, "run_id": run_id,
+                 "assignment_id": assignment_id, "revision": current["revision"],
+                 "attempt": current["attempt"], "type": "result_ready", "result_digest": digest}
+        latest["outbox"].setdefault(event_id(event), {
+            "event": event, "received": False, "action_intent": None, "applied": False})
+        return True
+
+    run = _change_assignment(store, run, assignment_id, change)
     return run, result
 
 
@@ -411,9 +498,16 @@ def collect_event(client: HerdrClient, store: StateStore, run_id: str, assignmen
         raise AssignmentError("protocol_error", "event does not belong to the assignment")
     event = item["event"]
     if event["revision"] != assignment["revision"] or event["attempt"] != assignment["attempt"]:
-        if not item["received"]:
-            item["received"] = True
-            _save(run, store, owner_epoch)
+        def receive_stale(latest, current):
+            record = latest["outbox"].get(event_key)
+            if not record or record["event"] != event:
+                raise AssignmentError("protocol_error", "event changed during collection")
+            if record["received"]:
+                return False
+            record["received"] = True
+            return True
+
+        _change_assignment(store, run, assignment_id, receive_stale, allow_revision=True)
         raise AssignmentError("stale_event", "event predates current assignment revision")
     result = None
     if event["type"] == "result_ready":
@@ -432,9 +526,20 @@ def collect_event(client: HerdrClient, store: StateStore, run_id: str, assignmen
     worker = next((agent for agent in private["agents"]
                    if member and agent["pane_id"] == member["pane_id"]), None)
     released = bool(worker and worker.get("agent_status") in {"idle", "done"})
-    if not item["received"]:
-        item["received"] = True
+    def receive(latest, current):
+        record = latest["outbox"].get(event_key)
+        if not record or record["event"] != event:
+            raise AssignmentError("protocol_error", "event changed during collection")
         if result is not None:
-            assignment["state"] = "collected"
-        _save(run, store, owner_epoch)
+            validate_result_binding(result, current)
+            if digest != current.get("result_digest") or not _has_result(latest, current):
+                raise AssignmentError("protocol_error", "result changed during collection")
+        if record["received"] and (result is None or current["state"] == "collected"):
+            return False
+        record["received"] = True
+        if result is not None:
+            current["state"] = "collected"
+        return True
+
+    run = _change_assignment(store, run, assignment_id, receive)
     return run, result, released

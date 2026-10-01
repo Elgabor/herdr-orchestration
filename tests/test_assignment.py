@@ -1,4 +1,5 @@
 import copy
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -10,11 +11,13 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from herdr_runtime.assignment import (AssignmentError, collect_event, dispatch,
+from herdr_runtime.assignment import (AssignmentError, _finish_wait, collect_event, dispatch,
                                       pending_events, publish_result, reattach_wait,
                                       validate_dispatch_config)  # noqa: E402
 from herdr_runtime.context import adopt_existing, inspect_team  # noqa: E402
-from herdr_runtime.state import StateStore  # noqa: E402
+from herdr_runtime.control import apply_control  # noqa: E402
+from herdr_runtime.state import StateConflict, StateStore  # noqa: E402
+from herdr_runtime.transport import HerdrError  # noqa: E402
 
 
 class Client:
@@ -505,6 +508,525 @@ class AssignmentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "frozen roster"):
             self.send()
         self.assertEqual(self.channel.sends, [])
+
+
+class AssignmentRaceTests(unittest.TestCase):
+    """Deterministic schedules at external-wait and local-CAS boundaries."""
+
+    send = AssignmentTests.send
+    _active_with_lost_listener = AssignmentTests._active_with_lost_listener
+
+    def setUp(self):
+        AssignmentTests.setUp(self)
+        self.prompts = []
+
+        def prompt(pane, packet):
+            self.prompts.append((pane, packet))
+            return {"agent_status": "working"}
+
+        self.client.agent_prompt = prompt
+
+    def mutate(self, change):
+        run = self.store.load_run("example-run")
+        generation = run["generation"]
+        change(run)
+        run["generation"] += 1
+        return self.store.update_run(run, expected_generation=generation, owner_epoch=1)
+
+    def publish(self, collect=False):
+        run = self.store.load_run("example-run")
+        task = run["assignments"]["example-assignment"]
+        result = json.loads((ROOT / "templates" / "result.example.json").read_text())
+        result.update(conversation_id=task["conversation_id"], revision=task["revision"],
+                      attempt=task["attempt"])
+        if task.get("amendments"):
+            result["acknowledged_amendments"] = [a["amendment_id"] for a in task["amendments"]]
+        (self.root / "result.json").write_text(json.dumps(result))
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][1])
+        try:
+            run, _ = publish_result(self.client, self.store, "example-run", "example-assignment",
+                                    self.root, "result.json")
+        finally:
+            self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+        if collect:
+            key = next(key for key, item in run["outbox"].items()
+                       if item["event"]["type"] == "result_ready")
+            run, _, _ = collect_event(self.client, self.store, "example-run", "example-assignment", key, 1)
+            self.store.plan_action("example-run", key, "review", owner_epoch=1)
+            run = self.store.mark_applied("example-run", key, "review", owner_epoch=1)
+        return run
+
+    def amend(self):
+        self.client.data["snapshot"]["agents"][1]["agent_status"] = "working"
+        run = self.store.load_run("example-run")
+        previous = self.client.data["current"]
+        self.client.data["current"] = copy.deepcopy(self.client.data["snapshot"]["panes"][0])
+        try:
+            return apply_control(self.client, self.store, {
+                "run_id": "example-run", "type": "amend_assignment",
+                "assignment_id": "example-assignment", "expected_revision": 0,
+                "amendment_id": "a1", "instruction": "Include the updated requirement"},
+                run["generation"], 1)
+        finally:
+            self.client.data["current"] = previous
+
+    def wait(self, mode, during_wait, error=None, completion=None):
+        if mode == "dispatch":
+            channel = self.channel
+            channel.on_send = during_wait
+            channel.completion = completion or {"agent_status": "done"}
+            if error is None:
+                return self.send()
+            original = channel.send
+
+            def fail(*args):
+                original(*args)
+                raise error
+
+            with patch.object(channel, "send", side_effect=fail):
+                return self.send()
+        channel = self._active_with_lost_listener()
+        channel.on_wait = during_wait
+        channel.completion = completion or {"agent_status": "done"}
+        original = channel.wait_existing
+
+        def finish(*args):
+            value = original(*args)
+            if error is not None:
+                raise error
+            return value
+
+        generation = self.store.load_run("example-run")["generation"]
+        with patch("herdr_runtime.assignment.os.kill", side_effect=ProcessLookupError), \
+                patch.object(channel, "wait_existing", side_effect=finish):
+            return reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                                 generation, 1, channel)
+
+    def test_terminal_result_precedes_late_success_or_transport_error(self):
+        for mode in ("dispatch", "reattach"):
+            for collected in (False, True):
+                for error in (None, HerdrError("response lost"), RuntimeError("response lost")):
+                    with self.subTest(mode=mode, collected=collected, error=error):
+                        self.setUp()
+                        winner = []
+                        run = self.wait(mode, lambda: winner.append(self.publish(collected)),
+                                        error)
+                        self.assertEqual(run, winner[0])
+                        self.assertEqual(len(self.channel.sends), 1)
+                        self.assertEqual(len(run["outbox"]), 1)
+                        self.assertEqual(run["assignments"]["example-assignment"]["state"],
+                                         "collected" if collected else "result_received")
+
+    def test_unexpected_errors_are_not_hidden_by_a_result(self):
+        class ChannelImplementationError(RuntimeError):
+            pass
+
+        errors = (ChannelImplementationError("channel implementation bug"),
+                  TypeError("channel programming error"), ValueError("invalid channel input"),
+                  OSError("channel I/O error"), StateConflict("channel state conflict"),
+                  AssignmentError("protocol_error", "channel assignment error"))
+        for mode in ("dispatch", "reattach"):
+            for collected in (False, True):
+                for error in errors:
+                    with self.subTest(mode=mode, collected=collected, error=error):
+                        self.setUp()
+                        with self.assertRaises(type(error)) as raised:
+                            self.wait(mode, lambda: self.publish(collected), error)
+                        self.assertIs(raised.exception, error)
+                        self.assertEqual(self.store.load_run("example-run")["assignments"]
+                                         ["example-assignment"]["state"],
+                                         "collected" if collected else "result_received")
+                        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_legacy_runtime_error_without_result_records_uncertainty_and_is_not_retried(self):
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+                error = RuntimeError("response lost")
+                with self.assertRaises(AssignmentError) as raised:
+                    self.wait(mode, lambda: None, error)
+                self.assertEqual(raised.exception.outcome,
+                                 "delivery_uncertain" if mode == "dispatch" else "needs_reconcile")
+                self.assertIs(raised.exception.__cause__, error)
+                run = self.store.load_run("example-run")
+                self.assertEqual(run["assignments"]["example-assignment"]["state"], raised.exception.outcome)
+                self.assertEqual(len(self.channel.sends), 1)
+
+    def test_specific_channel_error_without_result_is_not_hidden_as_delivery_uncertainty(self):
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+                error = StateConflict("local state invariant")
+                with self.assertRaises(StateConflict) as raised:
+                    self.wait(mode, lambda: None, error)
+                self.assertIs(raised.exception, error)
+                run = self.store.load_run("example-run")
+                self.assertEqual(run["assignments"]["example-assignment"]["state"],
+                                 "dispatching" if mode == "dispatch" else "active")
+                self.assertEqual(len(self.channel.sends), 1)
+
+    def test_amendment_before_completion_uses_current_revision(self):
+        for mode in ("dispatch", "reattach"):
+            for lifecycle in ("done", "idle", "blocked"):
+                with self.subTest(mode=mode, lifecycle=lifecycle):
+                    self.setUp()
+                    run = self.wait(mode, self.amend, completion={"agent_status": lifecycle})
+                    task = run["assignments"]["example-assignment"]
+                    self.assertEqual(task["revision"], 1)
+                    self.assertEqual(task["amendments"][0]["delivery"], "queued")
+                    event = next(iter(run["outbox"].values()))["event"]
+                    self.assertEqual((event["revision"], event["attempt"]), (1, 1))
+                    self.assertEqual(event["type"], "blocked" if lifecycle == "blocked" else "protocol_error")
+                    self.assertEqual(len(self.prompts), 1)
+                    self.assertEqual(len(self.channel.sends), 1)
+
+    def test_result_of_updated_revision_can_be_collected_during_wait(self):
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+
+                def during_wait():
+                    self.amend()
+                    self.publish(True)
+
+                run = self.wait(mode, during_wait)
+                task = run["assignments"]["example-assignment"]
+                self.assertEqual((task["revision"], task["state"]), (1, "collected"))
+                self.assertTrue(task["amendments"][0]["worker_ack"])
+                self.assertEqual(len(run["outbox"]), 1)
+
+    def test_changed_bindings_are_checked_before_terminal_shortcut(self):
+        changes = {
+            "epoch": lambda run: self.store.resume_owner("example-run", expected_epoch=1),
+            "attempt": lambda run: run["assignments"]["example-assignment"].update(attempt=2),
+            "conversation": lambda run: run["assignments"]["example-assignment"].update(conversation_id="changed"),
+            "context": lambda run: run["assignments"]["example-assignment"].update(context_key="changed"),
+            "revision": lambda run: run["assignments"]["example-assignment"].update(revision=0),
+            "listener": lambda run: run["assignments"]["example-assignment"].update(return_handle="replacement"),
+            "missing": lambda run: run["assignments"].clear(),
+        }
+        for mode in ("dispatch", "reattach"):
+            for name, change in changes.items():
+                for failed in (False, True):
+                    with self.subTest(mode=mode, binding=name, failed=failed):
+                        self.setUp()
+                        winner = []
+
+                        def during_wait():
+                            if name == "revision":
+                                self.amend()
+                            self.publish(True)
+                            if name == "epoch":
+                                change(None)
+                            else:
+                                self.mutate(change)
+                            winner.append(self.store.load_run("example-run"))
+
+                        with self.assertRaises(AssignmentError) as raised:
+                            self.wait(mode, during_wait, HerdrError("lost") if failed else None)
+                        self.assertEqual(raised.exception.outcome, "needs_reconcile")
+                        self.assertEqual(self.store.load_run("example-run"), winner[0])
+                        self.assertEqual(len(self.channel.sends), 1)
+
+    def inject_update(self, predicate, concurrent):
+        """Commit a competing transition just before the observed CAS write."""
+        original = self.store.update_run
+        fired = []
+
+        def update(run, **kwargs):
+            if not fired and predicate(run):
+                fired.append(True)
+                concurrent()
+            return original(run, **kwargs)
+
+        return patch.object(self.store, "update_run", side_effect=update), fired
+
+    def test_result_wins_cas_race_against_completion_and_delivery_error(self):
+        for mode in ("dispatch", "reattach"):
+            for failed in (False, True):
+                with self.subTest(mode=mode, failed=failed):
+                    self.setUp()
+                    winner = []
+                    hook, fired = self.inject_update(
+                        lambda run: run["assignments"]["example-assignment"]["state"] in
+                        {"protocol_error", "delivery_uncertain", "needs_reconcile"},
+                        lambda: winner.append(self.publish(True)))
+                    with hook:
+                        run = self.wait(mode, lambda: None, HerdrError("lost") if failed else None)
+                    self.assertTrue(fired)
+                    self.assertEqual(run, winner[0])
+                    self.assertEqual(len(self.channel.sends), 1)
+
+    def test_completion_wins_publication_cas_and_late_result_is_preserved(self):
+        for lifecycle in ("done", "blocked", "unknown"):
+            with self.subTest(lifecycle=lifecycle):
+                self.setUp()
+
+                def complete():
+                    baseline = self.store.load_run("example-run")
+                    _finish_wait(self.store, baseline, "example-assignment", {"agent_status": lifecycle})
+
+                hook, fired = self.inject_update(
+                    lambda run: run["assignments"]["example-assignment"]["state"] == "result_received",
+                    complete)
+                with hook:
+                    run = self.wait("dispatch", lambda: self.publish(True))
+                self.assertTrue(fired)
+                self.assertEqual(run["assignments"]["example-assignment"]["state"], "collected")
+                types = [item["event"]["type"] for item in run["outbox"].values()]
+                self.assertIn("result_ready", types)
+                self.assertEqual(len(types), 1 if lifecycle == "unknown" else 2)
+                for key, item in run["outbox"].items():
+                    if item["event"]["type"] != "result_ready":
+                        collect_event(self.client, self.store, "example-run", "example-assignment", key, 1)
+                self.assertEqual(self.store.load_run("example-run")["assignments"]
+                                 ["example-assignment"]["state"], "collected")
+
+    def test_unrelated_updates_survive_finalization_cas(self):
+        hook, fired = self.inject_update(
+            lambda run: run["assignments"]["example-assignment"]["state"] == "protocol_error",
+            lambda: self.mutate(lambda run: run.update(pause_dispatch=True)))
+        with hook:
+            run = self.wait("dispatch", lambda: None)
+        self.assertTrue(fired)
+        self.assertTrue(run["pause_dispatch"])
+        self.assertEqual(len(run["outbox"]), 1)
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_amendment_wins_completion_cas_without_an_old_revision_event(self):
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+                hook, fired = self.inject_update(
+                    lambda run: run["assignments"]["example-assignment"]["state"] == "protocol_error",
+                    self.amend)
+                with hook:
+                    run = self.wait(mode, lambda: None)
+                self.assertTrue(fired)
+                self.assertEqual(run["assignments"]["example-assignment"]["revision"], 1)
+                self.assertEqual([item["event"]["revision"] for item in run["outbox"].values()], [1])
+                self.assertEqual(len(self.prompts), 1)
+                self.assertEqual(len(self.channel.sends), 1)
+
+    def test_collection_merges_concurrent_receipt_and_action_intent(self):
+        self.send()
+        published = self.publish()
+        key = next(iter(published["outbox"]))
+
+        def action():
+            self.store.receive_event("example-run", key, owner_epoch=1)
+            self.store.plan_action("example-run", key, "review", owner_epoch=1)
+            self.store.mark_applied("example-run", key, "review", owner_epoch=1)
+
+        hook, fired = self.inject_update(
+            lambda run: run["assignments"]["example-assignment"]["state"] == "collected", action)
+        with hook:
+            run, _, _ = collect_event(self.client, self.store, "example-run", "example-assignment", key, 1)
+        self.assertTrue(fired)
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "collected")
+        self.assertTrue(run["outbox"][key]["applied"])
+        self.assertEqual(run["outbox"][key]["action_intent"], "review")
+
+    def test_acknowledged_result_wins_amendment_delivery_cas(self):
+        for failed in (False, True):
+            with self.subTest(failed=failed):
+                self.setUp()
+                self.send()
+
+                def is_delivery(run):
+                    task = run["assignments"]["example-assignment"]
+                    return bool(task.get("amendments") and task["amendments"][0]["delivery"] in
+                                {"queued", "uncertain"})
+
+                hook, fired = self.inject_update(is_delivery, lambda: self.publish(True))
+                with hook:
+                    if failed:
+                        with patch.object(self.client, "agent_prompt", side_effect=HerdrError("lost")):
+                            run = self.amend()
+                    else:
+                        run = self.amend()
+                self.assertTrue(fired)
+                task = run["assignments"]["example-assignment"]
+                self.assertEqual(task["state"], "collected")
+                self.assertTrue(task["amendments"][0]["worker_ack"])
+                self.assertEqual(task["amendments"][0]["delivery"], "acknowledged")
+                self.assertTrue(next(iter(run["outbox"].values()))["applied"])
+                self.assertEqual(len(self.channel.sends), 1)
+
+    def test_updated_revision_rejects_old_publication_without_overwriting_amendment(self):
+        winner = []
+        hook, fired = self.inject_update(
+            lambda run: run["assignments"]["example-assignment"]["state"] == "result_received",
+            lambda: winner.append(self.amend()))
+        with hook, self.assertRaises(AssignmentError) as raised:
+            self.wait("dispatch", self.publish)
+        self.assertTrue(fired)
+        self.assertEqual(raised.exception.outcome, "needs_reconcile")
+        self.assertEqual(self.store.load_run("example-run"), winner[0])
+        self.assertEqual(winner[0]["outbox"], {})
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_transport_failure_without_result_is_reported_and_late_result_is_accepted(self):
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+                with self.assertRaises(AssignmentError) as raised:
+                    self.wait(mode, lambda: None, HerdrError("wait failed"))
+                self.assertEqual(raised.exception.outcome,
+                                 "delivery_uncertain" if mode == "dispatch" else "needs_reconcile")
+                task = self.store.load_run("example-run")["assignments"]["example-assignment"]
+                self.assertEqual(task["state"], raised.exception.outcome)
+                self.assertEqual(self.publish(True)["assignments"]["example-assignment"]["state"], "collected")
+                self.assertEqual(len(self.channel.sends), 1)
+
+    def test_no_lock_during_external_calls(self):
+        def probe(*args):
+            fd = os.open(self.store.root / ".lock", os.O_RDWR)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+            return {"agent_status": "working"}
+
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+                with patch.object(self.client, "agent_prompt", side_effect=probe):
+                    self.wait(mode, lambda: (probe(), self.amend()))
+
+    def test_continuous_contention_is_bounded_without_replaying_external_calls(self):
+        original = self.store.update_run
+        conflicts = []
+
+        def update(run, **kwargs):
+            if run["assignments"]["example-assignment"]["state"] == "protocol_error":
+                conflicts.append(True)
+                self.mutate(lambda run: run.update(pause_dispatch=not run["pause_dispatch"]))
+            return original(run, **kwargs)
+
+        with patch.object(self.store, "update_run", side_effect=update):
+            with self.assertRaisesRegex(AssignmentError, "did not settle"):
+                self.wait("dispatch", lambda: None)
+        self.assertEqual(len(conflicts), 8)
+        self.assertEqual(len(self.channel.sends), 1)
+        run = self.store.load_run("example-run")
+        self.assertEqual(run["assignments"]["example-assignment"]["state"], "dispatching")
+        self.assertEqual(run["outbox"], {})
+
+    def test_result_on_last_cas_conflict_is_still_returned(self):
+        original = self.store.update_run
+        conflicts = []
+        winner = []
+
+        def update(run, **kwargs):
+            if run["assignments"]["example-assignment"]["state"] == "protocol_error":
+                conflicts.append(True)
+                if len(conflicts) == 8:
+                    winner.append(self.publish(True))
+                else:
+                    self.mutate(lambda run: run.update(pause_dispatch=not run["pause_dispatch"]))
+            return original(run, **kwargs)
+
+        with patch.object(self.store, "update_run", side_effect=update):
+            run = self.wait("dispatch", lambda: None)
+        self.assertEqual(len(conflicts), 8)
+        self.assertEqual(run, winner[0])
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_generation_regression_invalidates_terminal_shortcut(self):
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+                original = self.store.load_run
+                stale = []
+                winner = []
+
+                def during_wait():
+                    winner.append(self.publish(True))
+                    stale.append(True)
+
+                def load(run_id):
+                    run = original(run_id)
+                    if stale:
+                        run["generation"] = 0
+                    return run
+
+                with patch.object(self.store, "load_run", side_effect=load):
+                    with self.assertRaises(AssignmentError) as raised:
+                        self.wait(mode, during_wait)
+                self.assertEqual(raised.exception.outcome, "needs_reconcile")
+                self.assertEqual(original("example-run"), winner[0])
+
+    def test_terminal_state_without_matching_event_does_not_hide_wait_error(self):
+        for mode in ("dispatch", "reattach"):
+            with self.subTest(mode=mode):
+                self.setUp()
+
+                def during_wait():
+                    self.publish(True)
+                    self.mutate(lambda run: run["outbox"].clear())
+
+                with self.assertRaisesRegex(AssignmentError, "matching result event"):
+                    self.wait(mode, during_wait, HerdrError("lost"))
+                self.assertEqual(len(self.channel.sends), 1)
+
+    def test_duplicate_publish_and_collect_after_collection_keep_action_intent(self):
+        self.send()
+        winner = self.publish(True)
+        key = next(iter(winner["outbox"]))
+        self.assertEqual(self.publish(), winner)
+        run, result, _ = collect_event(self.client, self.store, "example-run", "example-assignment", key, 1)
+        self.assertEqual(run, winner)
+        self.assertEqual(result["status"], "done")
+        item = run["outbox"][key]
+        self.assertTrue(item["received"] and item["applied"])
+        self.assertEqual(item["action_intent"], "review")
+
+    def test_collected_reattach_does_not_arm_or_wait(self):
+        self.send()
+        winner = self.publish(True)
+        channel = unittest.mock.Mock()
+        run = reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                            winner["generation"], 1, channel)
+        self.assertEqual(run, winner)
+        channel.assert_not_called()
+        self.assertEqual(channel.mock_calls, [])
+
+    def test_result_collected_during_reattach_arm_does_not_replace_listener(self):
+        channel = self._active_with_lost_listener()
+        generation = self.store.load_run("example-run")["generation"]
+        original = channel.arm
+        winner = []
+
+        def arm(*args):
+            winner.append(self.publish(True))
+            return original(*args)
+
+        with patch.object(channel, "arm", side_effect=arm), \
+                patch("herdr_runtime.assignment.os.kill", side_effect=ProcessLookupError):
+            run = reattach_wait(self.client, self.store, "example-run", "example-assignment",
+                                generation, 1, channel)
+        self.assertEqual(run, winner[0])
+        self.assertEqual(channel.waits, [])
+        self.assertEqual(len(self.channel.sends), 1)
+
+    def test_real_storage_errors_are_not_retried_as_contention(self):
+        for error in (OSError("disk failure"), StateConflict("invariant failure")):
+            with self.subTest(error=error):
+                self.setUp()
+                original = self.store.update_run
+
+                def update(run, **kwargs):
+                    if run["assignments"]["example-assignment"]["state"] == "protocol_error":
+                        raise error
+                    return original(run, **kwargs)
+
+                with patch.object(self.store, "update_run", side_effect=update):
+                    with self.assertRaises(type(error)) as raised:
+                        self.wait("dispatch", lambda: None)
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(self.channel.sends), 1)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from .assignment import AssignmentError, _save
+from .assignment import AssignmentError, _change_assignment, _has_result, _save
 from .context import inspect_team, verify_binding
 from .contracts import ContractError, ID
 from .state import StateConflict, StateStore
@@ -100,35 +100,31 @@ def apply_control(client: HerdrClient, store: StateStore, config: dict,
                          "instruction": config["instruction"],
                          "boundary": "Continue this assignment in the same native conversation. Include the new revision and all acknowledged_amendments IDs in the result."},
                         ensure_ascii=False, separators=(",", ":"))
+    def delivery(state):
+        def change(latest, current):
+            record = next((item for item in current.get("amendments", [])
+                           if item["amendment_id"] == config["amendment_id"]
+                           and item["revision"] == revision), None)
+            if record is None:
+                raise AssignmentError("needs_reconcile", "amendment changed during delivery")
+            if record["worker_ack"]:
+                if not _has_result(latest, current):
+                    raise AssignmentError("needs_reconcile", "amendment acknowledgement has no result")
+                return False
+            if record["delivery"] == state:
+                return False
+            record["delivery"] = state
+            return True
+
+        return _change_assignment(store, run, assignment["assignment_id"], change, allow_revision=True)
+
     try:
         client.agent_prompt(member["pane_id"], packet)
     except HerdrError as error:
-        latest = store.load_run(run["run_id"])
-        if latest["owner_epoch"] != owner_epoch:
-            raise AssignmentError("needs_reconcile", "owner changed during amendment delivery") from error
-        record = next((item for item in latest["assignments"][assignment["assignment_id"]]["amendments"]
-                       if item["amendment_id"] == config["amendment_id"]), None)
-        if record is None:
-            raise AssignmentError("needs_reconcile", "amendment changed during delivery") from error
+        latest = delivery("uncertain")
+        record = next(item for item in latest["assignments"][assignment["assignment_id"]]["amendments"]
+                      if item["amendment_id"] == config["amendment_id"])
         if record["worker_ack"]:
             return latest
-        record["delivery"] = "uncertain"
-        try:
-            _save(latest, store, owner_epoch)
-        except StateConflict as conflict:
-            raise AssignmentError("needs_reconcile", "amendment state changed during delivery") from conflict
         raise AssignmentError("delivery_uncertain", "amendment delivery uncertain; do not resend") from error
-    latest = store.load_run(run["run_id"])
-    if latest["owner_epoch"] != owner_epoch:
-        raise AssignmentError("needs_reconcile", "owner changed during amendment delivery")
-    record = next((item for item in latest["assignments"][assignment["assignment_id"]]["amendments"]
-                   if item["amendment_id"] == config["amendment_id"]), None)
-    if record is None:
-        raise AssignmentError("needs_reconcile", "amendment changed during delivery")
-    if record["worker_ack"]:
-        return latest
-    record["delivery"] = "queued"
-    try:
-        return _save(latest, store, owner_epoch)
-    except StateConflict as error:
-        raise AssignmentError("needs_reconcile", "amendment state changed during delivery") from error
+    return delivery("queued")

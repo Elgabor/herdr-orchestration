@@ -46,6 +46,34 @@ pending events and collect one event idempotently with `assignment pending`
 and `assignment collect`; a stale revision cannot close an amended task. A `blocked` result
 remains blocked even if Herdr later reports the agent idle.
 
+Wait completion and result publication merge through generation-checked local
+writes. A matching `result_ready` event protects both `result_received` and
+`collected` from late completion or lost transport responses. Identity, owner
+epoch, attempt and listener changes invalidate the waiting operation before
+that shortcut. Amendments may advance the revision during a wait; a missing
+result observation is recorded against the current revision and attempt.
+An identical publication after collection preserves event receipt and action
+intent. A later validated result may follow a missing-result observation or
+delivery uncertainty; its diagnostic outbox event is retained for review.
+
+Only a generation/epoch CAS conflict retries a local write, at most eight
+times; prompts and waits are never replayed. Persistent contention requires
+explicit reconciliation. Specific channel exceptions (including state,
+validation, I/O and implementation errors), storage errors and other state
+conflicts propagate, even if a result exists. For compatibility, a plain
+`RuntimeError` from the send/wait boundary is treated as uncertain delivery,
+as is `HerdrError`. Either is superseded only by the matching recorded result;
+without that proof dispatch reports delivery uncertainty and reattach reports
+reconciliation, preserving the original error as its cause. An untyped
+`RuntimeError` inside the channel cannot distinguish a programming fault from
+a lost response; channels must use a specific exception for such faults.
+Other channel failures leave the saved intent for explicit inspection.
+These checks rely on writers using the state store's generation/epoch rules;
+they cannot detect arbitrary edits that reuse an old generation. Result files
+and checkout observations are external snapshots, not transactions with the
+state store. The offline regressions exercise deterministic event orders and
+CAS conflicts; they do not certify live transport or all possible schedules.
+
 `control apply` takes a versioned config and expected run generation. A
 `future_instruction` stays in the run until the next assignment packet and
 does not prompt a busy worker. `pause_dispatch` only gates new assignments.
