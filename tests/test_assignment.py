@@ -309,8 +309,11 @@ class AssignmentTests(unittest.TestCase):
         self.config["assignment"].update(repo=str(self.root), base_head="a" * 40,
                                           work_snapshot="unverified")
         self.config["write_scope"] = ["src"]
-        with self.assertRaisesRegex(AssignmentError, "checkout inspection"):
+        # A temporary directory may be outside a repo or nested inside one.
+        # Both must block dispatch with the same public outcome.
+        with self.assertRaises(AssignmentError) as raised:
             self.send()
+        self.assertEqual(raised.exception.outcome, "needs_reconcile")
         self.assertEqual(self.channel.sends, [])
 
     def test_clean_repo_assignment_dispatches_and_changed_base_blocks(self):
